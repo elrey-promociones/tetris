@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Casino El Rey - Tetris Promocional</title>
+    <meta name="description" content="Juego de Tetris responsivo para Casino El Rey con recompensas de fichas en tiempo real, códigos correlativos en Firebase y canje libre por WhatsApp." />
+    <meta name="theme-color" content="#06080d" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Fuentes Estilo Casino VIP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Montserrat:wght@400;600;700;800;900&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+    <!-- Estilos Críticos Inmediatos (Evita que los modales se desordenen) -->
+    <style>
+      .hidden { display: none !important; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        background-color: #06080d;
+        color: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, 'Montserrat', sans-serif;
+        overflow: hidden;
+      }
+    </style>
+
+    <!-- Hoja de Estilos Principal (Ruta relativa para GitHub Pages) -->
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="casino-body">
+    <div id="casino-app" class="casino-container">
+      
+      <!-- HEADER COMPACTO PARA MÓVILES -->
+      <header class="casino-header">
+        <div id="casino-logo-container" class="casino-logo-wrapper">
+          <div class="casino-logo-badge">
+            <span class="casino-crown-icon">👑</span>
+            <div class="casino-brand-text">
+              <span class="casino-title-gold">CASINO EL REY</span>
+              <span class="casino-subtitle-neon">PROMO TETRIS VIP</span>
+            </div>
+            <span class="casino-crown-icon">🎰</span>
+          </div>
+        </div>
+
+        <!-- Barra de Estado Compacta -->
+        <div class="player-bar">
+          <div class="player-info-card">
+            <span class="player-label">JUGADOR:</span>
+            <span id="player-nickname-display" class="player-value">Invitado</span>
+            <span id="player-code-badge" class="player-code-tag">#----</span>
+          </div>
+
+          <div class="player-bar-right">
+            <div id="firebase-status-pill" class="firebase-status connected" title="Conexión en tiempo real con Firebase Firestore">
+              <span class="status-dot"></span>
+              <span id="firebase-status-text">Firestore OK</span>
+            </div>
+
+            <button id="audio-toggle-btn" class="audio-btn" title="Silenciar / Activar Sonido" aria-label="Control de Sonido">
+              🔊
+            </button>
+            <button id="btn-pause-header" class="header-pause-btn" title="Pausar Partida" aria-label="Pausa">
+              ⏸
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- BARRA HUD DE RECOMPENSAS -->
+      <section class="casino-hud">
+        <div class="hud-box chips-highlight-box">
+          <div class="hud-chip-icon-wrap">
+            <div class="gold-chip-coin">🪙</div>
+          </div>
+          <div class="hud-chip-content">
+            <div class="hud-label-gold">FICHAS GANADAS</div>
+            <div id="hud-chips-count" class="hud-chips-counter">0</div>
+          </div>
+          <div id="floating-chips-container" class="floating-chips-zone"></div>
+        </div>
+
+        <div class="hud-box secondary-hud-box">
+          <div class="hud-metric-row">
+            <div class="hud-metric">
+              <span class="metric-label">LÍNEAS:</span>
+              <span id="hud-lines-count" class="metric-number">0</span>
+            </div>
+            <div class="hud-metric">
+              <span class="metric-label">VELOCIDAD:</span>
+              <span id="hud-difficulty-tag" class="metric-badge">RÁPIDA</span>
+            </div>
+          </div>
+          <div class="hud-progress-wrap" title="Progreso hacia el tope de 10,000 fichas">
+            <div class="progress-bar-bg">
+              <div id="chips-progress-bar" class="progress-bar-fill" style="width: 0%"></div>
+            </div>
+            <span id="chips-progress-text" class="progress-text">0 / 10,000</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ÁREA CENTRAL DEL TABLERO DE TETRIS -->
+      <main class="game-stage">
+        <!-- HOLD -->
+        <aside class="side-panel left-panel">
+          <div class="mini-card hold-card" id="card-hold">
+            <span class="mini-card-title">HOLD</span>
+            <canvas id="hold-canvas" width="60" height="60" class="mini-canvas"></canvas>
+          </div>
+          <div class="casino-mobile-hint">
+            <span class="hint-text">1 Lín = <strong>10🪙</strong></span>
+          </div>
+        </aside>
+
+        <!-- Canvas Principal -->
+        <div class="canvas-viewport" id="canvas-viewport">
+          <canvas id="tetris-canvas" width="300" height="600" class="main-canvas"></canvas>
+          
+          <!-- Capa de Pausa -->
+          <div id="pause-overlay" class="pause-overlay hidden">
+            <div class="pause-content">
+              <span class="pause-icon">⏸️</span>
+              <h2 class="pause-title">JUEGO EN PAUSA</h2>
+              <p class="pause-desc">TETRIS CASINO EL REY</p>
+              <button id="resume-btn" class="casino-btn gold-btn">CONTINUAR</button>
+            </div>
+          </div>
+
+          <!-- Toast Flotante de Obstáculos Basura -->
+          <div id="garbage-toast" class="garbage-toast hidden">
+            <span class="hazard-icon">⚠️</span>
+            <div class="garbage-text">
+              <strong>¡OBSTÁCULOS EL REY!</strong>
+              <span>+2 Bloques Basura Indestructibles</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEXT -->
+        <aside class="side-panel right-panel">
+          <div class="mini-card next-card">
+            <span class="mini-card-title">NEXT</span>
+            <canvas id="next-canvas" width="60" height="60" class="mini-canvas"></canvas>
+          </div>
+          <div class="casino-mobile-hint">
+            <span class="hint-text max-cap-text">Tope <strong>10k</strong></span>
+          </div>
+        </aside>
+      </main>
+
+      <!-- CONTROLES TÁCTILES ERGONÓMICOS PARA CELULARES -->
+      <footer class="casino-controls-bar">
+        <div class="touch-controls-cluster">
+          <button id="btn-left" class="touch-btn dpad-btn" aria-label="Mover a la Izquierda">
+            <span class="btn-icon">◀</span>
+            <span class="btn-micro-label">IZQ</span>
+          </button>
+          <button id="btn-right" class="touch-btn dpad-btn" aria-label="Mover a la Derecha">
+            <span class="btn-icon">▶</span>
+            <span class="btn-micro-label">DER</span>
+          </button>
+          <button id="btn-hold" class="touch-btn hold-btn" aria-label="Guardar Pieza en Espera">
+            <span class="btn-icon">📥</span>
+            <span class="btn-micro-label">HOLD</span>
+          </button>
+          <button id="btn-rotate" class="touch-btn action-btn rotate-btn" aria-label="Rotar Pieza">
+            <span class="btn-icon">🔄</span>
+            <span class="btn-micro-label">ROTAR</span>
+          </button>
+          <button id="btn-soft-drop" class="touch-btn action-btn drop-btn" aria-label="Bajar Pieza">
+            <span class="btn-icon">▼</span>
+            <span class="btn-micro-label">BAJAR</span>
+          </button>
+          <button id="btn-hard-drop" class="touch-btn action-btn slam-btn" aria-label="Caída Instantánea">
+            <span class="btn-icon">⚡</span>
+            <span class="btn-micro-label">SLAM</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- MODAL 1: REGISTRO DE APODO -->
+    <div id="nickname-modal" class="casino-modal-backdrop hidden">
+      <div class="casino-modal-card">
+        <div class="modal-gold-trim"></div>
+        <div class="modal-header">
+          <div class="modal-icon-badge">👑</div>
+          <h2 class="modal-title">¡BIENVENIDO A CASINO EL REY!</h2>
+          <p class="modal-desc">
+            Tetris Promocional Oficial. Cada línea que elimines se convierte en fichas de casino reales.
+          </p>
+        </div>
+
+        <form id="nickname-form" class="nickname-form" onsubmit="return false;">
+          <label for="nickname-input" class="input-label">Ingresa tu Apodo de Jugador:</label>
+          <div class="input-wrapper">
+            <span class="input-icon">👤</span>
+            <input 
+              type="text" 
+              id="nickname-input" 
+              class="casino-input" 
+              placeholder="Ej: ReyGanador77" 
+              maxlength="20" 
+              required 
+              autocomplete="off" 
+              autofocus
+            />
+          </div>
+          <p class="input-helper">
+            Se generará automáticamente tu <strong>Código Único Correlativo (0001, 0002...)</strong> en Firebase para canjear tus fichas.
+          </p>
+
+          <button type="submit" id="start-game-btn" class="casino-btn gold-btn full-width">
+            <span id="start-btn-text">EMPEZAR A JUGAR</span>
+            <span id="start-btn-spinner" class="spinner hidden"></span>
+          </button>
+        </form>
+
+        <div id="modal-error-msg" class="modal-error hidden"></div>
+      </div>
+    </div>
+
+    <!-- MODAL 2: CUPÓN DE COBRO -->
+    <div id="payout-modal" class="casino-modal-backdrop hidden">
+      <div class="casino-modal-card payout-card">
+        <div class="modal-gold-trim"></div>
+
+        <div class="coupon-logo-header">
+          <div class="coupon-badge">
+            <span class="coupon-crown">👑</span>
+            <span class="coupon-brand">CASINO EL REY</span>
+          </div>
+        </div>
+
+        <div id="max-cap-banner" class="max-cap-banner hidden">
+          🏆 ¡TOPE MÁXIMO DE RECOMPENSA ALCANZADO! 🏆
+        </div>
+
+        <!-- TÍTULO: TETRIS EL REY -->
+        <div class="congrats-wrapper">
+          <h2 class="congrats-text shimmer-text">¡FELICITACIONES!</h2>
+          <div class="congrats-promo-title">TETRIS EL REY</div>
+          <p class="congrats-subtitle">Has ganado fichas en tu partida promocional</p>
+        </div>
+
+        <!-- FICHAS GANADAS -->
+        <div class="payout-chips-container">
+          <div class="payout-label">TOTAL FICHAS GANADAS</div>
+          <div class="payout-chips-value-row">
+            <span class="payout-chip-symbol">🪙</span>
+            <span id="payout-fichas-amount" class="payout-number">0</span>
+            <span class="payout-currency">FICHAS</span>
+          </div>
+          <div class="payout-note">
+            Transformadas a partir de tus líneas conseguidas
+          </div>
+        </div>
+
+        <!-- Credencial del Jugador -->
+        <div class="player-credential-box">
+          <div class="credential-row">
+            <span class="cred-label">CÓDIGO DE USUARIO:</span>
+            <span id="coupon-user-code" class="cred-code">#0000</span>
+          </div>
+          <div class="credential-row">
+            <span class="cred-label">APODO REGISTRADO:</span>
+            <span id="coupon-user-nickname" class="cred-name">---</span>
+          </div>
+          <div class="credential-row">
+            <span class="cred-label">LÍNEAS LOGRADAS:</span>
+            <span id="coupon-lines-cleared" class="cred-data">0</span>
+          </div>
+        </div>
+
+        <!-- BOTÓN DE COBRO EN WHATSAPP (A CUALQUIER NÚMERO / CONTACTO) -->
+        <div class="payout-actions">
+          <a 
+            id="whatsapp-payout-btn" 
+            href="#" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            class="casino-btn whatsapp-btn"
+          >
+            <span class="whatsapp-icon">💬</span>
+            <span class="whatsapp-btn-text">Cobrar Fichas en WhatsApp</span>
+          </a>
+
+          <button id="restart-game-btn" class="casino-btn secondary-btn">
+            🔄 Jugar Otra Partida
+          </button>
+        </div>
+
+        <div class="coupon-footer-note">
+          Se abrirá WhatsApp para que elijas a qué contacto enviar tu código y cobrar tus fichas.
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts de Firebase SDK Compat Oficiales -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <!-- Código del Juego (Ruta relativa directa) -->
+    <script src="app.js"></script>
+  </body>
+</html>

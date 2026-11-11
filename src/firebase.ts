@@ -222,7 +222,7 @@ export async function recordGameSession(data: {
       const snap = await getDoc(userDocRef);
       if (snap.exists()) {
         const cur = snap.data();
-        const updatedFichas = (cur.totalFichas || 0) + data.fichas;
+        const updatedFichas = Math.min(10000, (cur.totalFichas || 0) + data.fichas);
         const updatedScore = Math.max(cur.highScore || 0, data.score);
         const updatedGames = (cur.gamesPlayed || 0) + 1;
 

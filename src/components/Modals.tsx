@@ -341,7 +341,7 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
 
           {isMaxCap && (
             <div className="bg-yellow-500/20 border border-yellow-400 text-yellow-200 font-mono text-[11px] font-black p-2 rounded-lg mb-3 animate-pulse">
-              ⚡ ¡TOPE MÁXIMO DE 50,000 FICHAS ALCANZADO! ⚡
+              ⚡ ¡TOPE MÁXIMO DE 10,000 FICHAS ALCANZADO! ⚡
             </div>
           )}
 

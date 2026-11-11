@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+:root {
+  --bg-deep: #000000;
+  --bg-surface: #0e1524;
+  --carbon-dark: #070b12;
+
+  --neon-orange: #ff6b35;
+  --neon-cyan: #38bdf8;
+  --neon-green: #22c55e;
+  --neon-green-bright: #4ade80;
+
+  --text-main: #f8fafc;
+  --font-mono: 'Orbitron', monospace;
+  --font-sans: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: #000000;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+/* Fondo Negro con soporte directo para fondo.jpg */
+.casino-cosmic-bg {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background-color: #000000;
+  background-image: url('/fondo.jpg'), url('fondo.jpg');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center center;
+  background-attachment: fixed;
+}
+
+/* Tipografía Neón */
+.neon-tetris-title {
+  font-family: var(--font-mono);
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #0b121e;
+  -webkit-text-stroke: 1.8px #ff7849;
+  text-shadow: 
+    0 0 5px #ff7849,
+    0 0 12px #ff5722,
+    0 0 24px rgba(255, 87, 34, 0.85);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* D-PAD Cruceta Verde Neón */
+.dpad-cross-body {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cross-bar-horizontal {
+  position: absolute;
+  width: 108px;
+  height: 38px;
+  background: #0f172a;
+  border: 2px solid var(--neon-green);
+  border-radius: 10px;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.7), inset 0 0 8px rgba(34, 197, 94, 0.2);
+}
+
+.cross-bar-vertical {
+  position: absolute;
+  width: 38px;
+  height: 108px;
+  background: #0f172a;
+  border: 2px solid var(--neon-green);
+  border-radius: 10px;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.7), inset 0 0 8px rgba(34, 197, 94, 0.2);
+}
+
+.dpad-key {
+  position: absolute;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--neon-green-bright);
+  font-size: 1.15rem;
+  text-shadow: 0 0 8px var(--neon-green);
+  z-index: 5;
+  transition: transform 0.05s ease, color 0.05s ease;
+  touch-action: none;
+}
+
+.dpad-key:active {
+  transform: scale(0.88);
+  color: #fff;
+  text-shadow: 0 0 14px var(--neon-green);
+}
+
+.key-up { top: 0; left: 36px; width: 38px; height: 38px; }
+.key-down { bottom: 0; left: 36px; width: 38px; height: 38px; }
+.key-left { left: 0; top: 36px; width: 38px; height: 38px; }
+.key-right { right: 0; top: 36px; width: 38px; height: 38px; }
+
+.dpad-center-circle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #080c14;
+  border: 1.5px solid rgba(34, 197, 94, 0.5);
+  z-index: 4;
+}
+
+/* Botón de Pausa */
+.btn-pause-retro {
+  background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+  border: 1.5px solid #38bdf8;
+  border-radius: 12px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35), 0 3px 6px rgba(0, 0, 0, 0.6);
+  touch-action: none;
+}
+
+.btn-pause-retro:active {
+  transform: scale(0.92);
+  border-color: #fde047;
+}
+
+/* Botón ROTAR Dorado */
+.btn-rotate-pad {
+  position: relative;
+  width: 104px;
+  height: 58px;
+  background: linear-gradient(145deg, #fde047 0%, #eab308 55%, #ca8a04 100%);
+  border: 2px solid #fef08a;
+  border-radius: 14px 14px 30px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(234, 179, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.6);
+  touch-action: none;
+}
+
+.btn-rotate-pad:active {
+  transform: scale(0.93);
+  box-shadow: 0 0 26px rgba(234, 179, 8, 0.85);
+}
+
+.rotate-label-debossed {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-weight: 900;
+  color: #171203;
+  letter-spacing: 1.5px;
+}
+
+/* Botón Redondo "A" (Hard Drop) */
+.btn-round-action-a {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #334155 0%, #1e293b 60%, #0f172a 100%);
+  border: 2px solid #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #f1f5f9;
+  font-family: var(--font-mono);
+  font-size: 0.98rem;
+  font-weight: 900;
+  touch-action: none;
+}
+
+.btn-round-action-a:active {
+  transform: scale(0.92);
+  border-color: #f59e0b;
+}
+
+/* Toast flotante de fichas */
+.chips-gain-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(234, 179, 8, 0.95);
+  color: #000;
+  font-family: var(--font-mono);
+  font-weight: 900;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  box-shadow: 0 0 16px rgba(234, 179, 8, 0.85);
+  pointer-events: none;
+  animation: floatUp 1.2s ease-out forwards;
+  z-index: 30;
+}
+
+@keyframes floatUp {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+  80% { opacity: 1; transform: translate(-50%, -10px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -24px) scale(0.9); }
+}

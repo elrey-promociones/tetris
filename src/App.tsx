@@ -1,15 +1,28 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * TETRIS EL REY - RETRO-FUTURISTA VIP
+ * Motor de Tetris con Canvas, Controles Táctiles, Sonido Web Audio
+ * y Firebase Firestore para contador secuencial atómico de usuarios (1, 2, 3...).
+ */
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { sounds } from './audio';
-import { testConnection, recordGameSession } from './firebase';
+import {
+  testConnection,
+  recordGameSession,
+  getExistingUserByCode,
+} from './firebase';
 import { PlayerProfile, TetrominoPiece, TetrominoType } from './types';
 import { Controls } from './components/Controls';
-import { LoginModal, PayoutModal, LeaderboardModal } from './components/Modals';
+import { LoginModal, PayoutModal, LeaderboardModal, AdminModal } from './components/Modals';
 import { NeonParticleSystem } from './particles';
 
+// Constantes de la Matriz y del Casino
 const COLS = 10;
 const ROWS = 20;
-const BLOCK_SIZE = 30;
+const BLOCK_SIZE = 30; // 300x600 nativo (aspect-ratio 1:2)
 
 const TOPE_MAXIMO_FICHAS = 50000;
 const FICHAS_POR_LINEA = 50;
@@ -17,12 +30,13 @@ const BONIFICACION_TETRIS_FICHAS = 150;
 const PUNTOS_POR_LINEA = [0, 100, 300, 600, 1000];
 
 // Dificultad Máxima Aumentada
-const LINEAS_POR_NIVEL = 6;        // Sube de nivel cada 6 líneas
-const VELOCIDAD_INICIAL_MS = 520;  // Caída inicial rápida (520ms)
-const FACTOR_ACELERACION = 0.76;   // Aceleración rápida por nivel (0.76x)
-const VELOCIDAD_MINIMA_MS = 40;    // Límite extremo arcade (40ms)
-const BASURA_INTERVALO_LINEAS = 7; // Obstáculos cada 7 líneas
+const LINEAS_POR_NIVEL = 6;        // Progresión de nivel súper rápida (cada 6 líneas)
+const VELOCIDAD_INICIAL_MS = 520;  // Caída inicial mucho más veloz y desafiante (520ms)
+const FACTOR_ACELERACION = 0.76;   // Aceleración pronunciada por nivel (0.76x)
+const VELOCIDAD_MINIMA_MS = 40;    // Límite arcade de velocidad extrema (40ms)
+const BASURA_INTERVALO_LINEAS = 7; // Obstáculos basura más frecuentes (cada 7 líneas)
 
+// Paleta de Colores Neón Fiel
 const TETROMINO_COLORS: Record<string, { core: string; main: string; dark: string; glow: string }> = {
   I: { core: '#a5f3fc', main: '#06b6d4', dark: '#0e7490', glow: 'rgba(6, 182, 212, 0.9)' },
   J: { core: '#bfdbfe', main: '#3b82f6', dark: '#1d4ed8', glow: 'rgba(59, 130, 246, 0.9)' },
@@ -34,6 +48,7 @@ const TETROMINO_COLORS: Record<string, { core: string; main: string; dark: strin
   GARBAGE: { core: '#9ca3af', main: '#374151', dark: '#111827', glow: 'rgba(239, 68, 68, 0.7)' },
 };
 
+// Matrices de Figuras Tetris
 const SHAPES: Record<string, number[][]> = {
   I: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]],
   J: [[1,0,0], [1,1,1], [0,0,0]],
@@ -45,13 +60,16 @@ const SHAPES: Record<string, number[][]> = {
 };
 
 export default function App() {
+  // Estado de Jugador y Firebase
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(true);
   const [showPayoutModal, setShowPayoutModal] = useState<boolean>(false);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
+  const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
+  // Estadísticas del Juego
   const [score, setScore] = useState<number>(0);
   const [lines, setLines] = useState<number>(0);
   const [level, setLevel] = useState<number>(1);
@@ -62,6 +80,7 @@ export default function App() {
   const [floatingChips, setFloatingChips] = useState<{ id: number; amount: number }[]>([]);
   const [showGarbageToast, setShowGarbageToast] = useState<boolean>(false);
 
+  // Referencias Canvas y Bucle
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const nextCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const requestRef = useRef<number | null>(null);
@@ -69,6 +88,7 @@ export default function App() {
   const dropCounterRef = useRef<number>(0);
   const dropIntervalRef = useRef<number>(VELOCIDAD_INICIAL_MS);
 
+  // Estado mutable del juego
   const gridRef = useRef<(string | number)[][]>(createEmptyGrid());
   const currentPieceRef = useRef<TetrominoPiece | null>(null);
   const nextPieceRef = useRef<TetrominoPiece | null>(null);
@@ -82,27 +102,59 @@ export default function App() {
     return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   }
 
+  // Comprobar conexión Firebase al montar y fijar dispositivo
   useEffect(() => {
-    testConnection().then((connected) => setFirebaseConnected(connected));
-    const cached = localStorage.getItem('tetris_el_rey_player');
-    if (cached) {
+    testConnection().then((connected) => {
+      setFirebaseConnected(connected);
+    });
+
+    // Cargar perfil permanente vinculado al dispositivo
+    const deviceUserRaw =
+      localStorage.getItem('tetris_device_locked_user') ||
+      localStorage.getItem('tetris_el_rey_player');
+
+    if (deviceUserRaw) {
       try {
-        const parsed = JSON.parse(cached);
+        const parsed: PlayerProfile = JSON.parse(deviceUserRaw);
         if (parsed.userCode && parsed.nickname) {
           setPlayer(parsed);
           setShowLoginModal(false);
+
+          // Sincronizar de inmediato con Firestore para tener el saldo acumulado real
+          // (por si el administrador reseteó o modificó las fichas en el panel)
+          getExistingUserByCode(parsed.userCode).then((fresh) => {
+            if (fresh) {
+              setPlayer(fresh);
+              localStorage.setItem('tetris_device_locked_user', JSON.stringify(fresh));
+            }
+          });
+
           startNewGame(parsed);
         }
       } catch {
-        localStorage.removeItem('tetris_el_rey_player');
+        setShowLoginModal(true);
       }
+    } else {
+      setShowLoginModal(true);
     }
   }, []);
 
+  const refreshCurrentPlayer = useCallback(async () => {
+    if (player?.userCode) {
+      const fresh = await getExistingUserByCode(player.userCode);
+      if (fresh) {
+        setPlayer(fresh);
+        localStorage.setItem('tetris_device_locked_user', JSON.stringify(fresh));
+      }
+    }
+  }, [player?.userCode]);
+
+  // Actualizar ref de pausa
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
 
+  // Generador 7-Bag
   const getNextTetromino = useCallback((): TetrominoPiece => {
     if (bagRef.current.length === 0) {
       const keys: TetrominoType[] = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
@@ -117,6 +169,7 @@ export default function App() {
     };
   }, []);
 
+  // Colisión
   const checkCollision = useCallback(
     (offsetX: number, offsetY: number, matrix: number[][]): boolean => {
       for (let r = 0; r < matrix.length; r++) {
@@ -124,8 +177,14 @@ export default function App() {
           if (matrix[r][c]) {
             const newX = offsetX + c;
             const newY = offsetY + r;
-            if (newX < 0 || newX >= COLS || newY >= ROWS) return true;
-            if (newY >= 0 && gridRef.current[newY][newX] !== 0) return true;
+
+            if (newX < 0 || newX >= COLS || newY >= ROWS) {
+              return true;
+            }
+
+            if (newY >= 0 && gridRef.current[newY][newX] !== 0) {
+              return true;
+            }
           }
         }
       }
@@ -134,6 +193,7 @@ export default function App() {
     []
   );
 
+  // Rotación
   const rotateMatrix = (matrix: number[][]): number[][] => {
     const N = matrix.length;
     const result = Array.from({ length: N }, () => Array(N).fill(0));
@@ -147,6 +207,7 @@ export default function App() {
 
   const tryRotatePiece = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
+
     const piece = currentPieceRef.current;
     const rotated = rotateMatrix(piece.matrix);
     const kicks = [0, -1, 1, -2, 2];
@@ -161,6 +222,7 @@ export default function App() {
     }
   }, [checkCollision]);
 
+  // Movimiento horizontal
   const moveHorizontal = useCallback(
     (dir: number) => {
       if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
@@ -173,6 +235,7 @@ export default function App() {
     [checkCollision]
   );
 
+  // Fin de Juego
   const triggerGameOver = useCallback(
     (reachedMaxCap = false) => {
       isPlayingRef.current = false;
@@ -181,13 +244,16 @@ export default function App() {
 
       if (reachedMaxCap) {
         sounds.play('tetris');
-        try { confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } }); } catch {}
+        try {
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+        } catch {}
       } else {
         sounds.play('gameover');
       }
 
       setShowPayoutModal(true);
 
+      // Guardar sesión en Firebase Firestore y acumular saldo
       if (player) {
         recordGameSession({
           userCode: player.userCode,
@@ -196,12 +262,18 @@ export default function App() {
           lines,
           level,
           fichas,
+        }).then((updated) => {
+          if (updated) {
+            setPlayer(updated);
+            localStorage.setItem('tetris_device_locked_user', JSON.stringify(updated));
+          }
         });
       }
     },
     [player, score, lines, level, fichas]
   );
 
+  // Obstáculos basura indestructibles
   const insertGarbageObstacles = useCallback((count = 3) => {
     let placed = 0;
     for (let i = 0; i < 30 && placed < count; i++) {
@@ -216,6 +288,7 @@ export default function App() {
     setTimeout(() => setShowGarbageToast(false), 2400);
   }, []);
 
+  // Aparición de nueva pieza
   const spawnNextPiece = useCallback(() => {
     currentPieceRef.current = nextPieceRef.current || getNextTetromino();
     nextPieceRef.current = getNextTetromino();
@@ -229,6 +302,7 @@ export default function App() {
     }
   }, [checkCollision, getNextTetromino, triggerGameOver]);
 
+  // Limpieza de líneas con efectos visuales de neón
   const clearFullLines = useCallback(() => {
     const clearedRows: number[] = [];
     for (let r = ROWS - 1; r >= 0; r--) {
@@ -251,6 +325,7 @@ export default function App() {
     if (clearedRows.length > 0) {
       const cleared = clearedRows.length;
 
+      // Disparar explosión de partículas tipo estela de neón y destellos láser
       particleSystemRef.current.triggerLineClear(
         clearedRows,
         cleared === 4,
@@ -260,14 +335,19 @@ export default function App() {
 
       setLines((prevLines) => {
         const newLines = prevLines + cleared;
+
+        // Puntos
         const addedScore = (PUNTOS_POR_LINEA[cleared] || 1000) * level;
         setScore((prev) => prev + addedScore);
 
+        // Fichas
         let addedFichas = cleared * FICHAS_POR_LINEA;
         if (cleared === 4) {
           addedFichas += BONIFICACION_TETRIS_FICHAS;
           sounds.play('tetris');
-          try { confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } }); } catch {}
+          try {
+            confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
+          } catch {}
         } else {
           sounds.play('line');
         }
@@ -281,12 +361,14 @@ export default function App() {
           return nextTotal;
         });
 
+        // Toast de fichas
         const toastId = Date.now() + Math.random();
         setFloatingChips((prev) => [...prev, { id: toastId, amount: addedFichas }]);
         setTimeout(() => {
           setFloatingChips((prev) => prev.filter((t) => t.id !== toastId));
         }, 1200);
 
+        // Nivel y aceleración aumentada
         const nextLevel = Math.floor(newLines / LINEAS_POR_NIVEL) + 1;
         if (nextLevel > level) {
           setLevel(nextLevel);
@@ -298,6 +380,7 @@ export default function App() {
           dropIntervalRef.current = newSpeed;
         }
 
+        // Basura periódica
         linesSinceLastGarbageRef.current += cleared;
         if (linesSinceLastGarbageRef.current >= BASURA_INTERVALO_LINEAS) {
           insertGarbageObstacles(3);
@@ -309,13 +392,14 @@ export default function App() {
     }
   }, [level, triggerGameOver, insertGarbageObstacles]);
 
+  // Fijar pieza
   const lockPiece = useCallback(() => {
     if (!currentPieceRef.current) return;
     const { x, y, matrix, type } = currentPieceRef.current;
 
     for (let r = 0; r < matrix.length; r++) {
       for (let c = 0; c < matrix[r].length; c++) {
-        if (matrix[r][c]) {
+        if (matrix[r][c] !== 0) {
           if (y + r < 0) {
             triggerGameOver(false);
             return;
@@ -329,6 +413,7 @@ export default function App() {
     spawnNextPiece();
   }, [clearFullLines, spawnNextPiece, triggerGameOver]);
 
+  // Soft Drop
   const softDrop = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
     const piece = currentPieceRef.current;
@@ -340,6 +425,7 @@ export default function App() {
     }
   }, [checkCollision, lockPiece]);
 
+  // Hard Drop
   const hardDrop = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
     const piece = currentPieceRef.current;
@@ -350,15 +436,25 @@ export default function App() {
     lockPiece();
   }, [checkCollision, lockPiece]);
 
+  // Pausa
   const togglePause = useCallback(() => {
     if (isGameOver || !isPlayingRef.current) return;
     setIsPaused((prev) => !prev);
     sounds.play('click');
   }, [isGameOver]);
 
-  const drawBlock = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, type: string, isGhost = false) => {
+  // Dibujo de bloques neón
+  const drawBlock = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    size: number,
+    type: string,
+    isGhost = false
+  ) => {
     const colors = TETROMINO_COLORS[type] || TETROMINO_COLORS.I;
     ctx.save();
+
     if (isGhost) {
       ctx.strokeStyle = colors.glow;
       ctx.lineWidth = 1.5;
@@ -369,19 +465,96 @@ export default function App() {
       const grad = ctx.createLinearGradient(x, y, x + size, y + size);
       grad.addColorStop(0, colors.main);
       grad.addColorStop(1, colors.dark || '#070b13');
+
       ctx.fillStyle = grad;
       ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
 
+      // Bisel de luz
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x + 2, y + 2, size - 4, size - 4);
 
+      // Núcleo brillante
       ctx.fillStyle = colors.core || 'rgba(255, 255, 255, 0.6)';
       ctx.fillRect(x + 5, y + 5, 4, 4);
+
+      // Borde exterior
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, size, size);
     }
+
     ctx.restore();
   };
 
+  // Múltiples estelas láser ascendentes
+  const drawPieceFallTrail = (ctx: CanvasRenderingContext2D, piece: TetrominoPiece) => {
+    const colors = TETROMINO_COLORS[piece.type] || TETROMINO_COLORS.T;
+    const { matrix, x, y } = piece;
+
+    ctx.save();
+    const numCols = matrix[0].length;
+
+    for (let c = 0; c < numCols; c++) {
+      let topR = -1;
+      for (let r = 0; r < matrix.length; r++) {
+        if (matrix[r][c]) {
+          topR = r;
+          break;
+        }
+      }
+
+      if (topR !== -1) {
+        const blockTopY = (y + topR) * BLOCK_SIZE;
+        const blockLeftX = (x + c) * BLOCK_SIZE;
+
+        if (blockTopY > 0) {
+          const trailHeight = Math.min(blockTopY, BLOCK_SIZE * 3.3);
+          const trailTopY = blockTopY - trailHeight;
+
+          // Franja difusa
+          const streamGrad = ctx.createLinearGradient(0, blockTopY, 0, trailTopY);
+          streamGrad.addColorStop(0, colors.glow.replace(/[\d.]+\)$/, '0.75)'));
+          streamGrad.addColorStop(0.3, colors.glow.replace(/[\d.]+\)$/, '0.35)'));
+          streamGrad.addColorStop(0.75, colors.glow.replace(/[\d.]+\)$/, '0.08)'));
+          streamGrad.addColorStop(1, 'transparent');
+
+          ctx.fillStyle = streamGrad;
+          ctx.fillRect(blockLeftX + 3, trailTopY, BLOCK_SIZE - 6, trailHeight);
+
+          // Línea láser central
+          const laserGrad = ctx.createLinearGradient(0, blockTopY, 0, trailTopY);
+          laserGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+          laserGrad.addColorStop(0.25, colors.core || 'rgba(255, 255, 255, 0.7)');
+          laserGrad.addColorStop(0.8, colors.glow.replace(/[\d.]+\)$/, '0.3)'));
+          laserGrad.addColorStop(1, 'transparent');
+
+          ctx.fillStyle = laserGrad;
+          ctx.fillRect(blockLeftX + BLOCK_SIZE / 2 - 1.5, trailTopY, 3, trailHeight);
+
+          // Destello en la base
+          const baseGrad = ctx.createRadialGradient(
+            blockLeftX + BLOCK_SIZE / 2,
+            blockTopY,
+            1,
+            blockLeftX + BLOCK_SIZE / 2,
+            blockTopY,
+            BLOCK_SIZE * 0.75
+          );
+          baseGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+          baseGrad.addColorStop(0.4, colors.glow.replace(/[\d.]+\)$/, '0.5)'));
+          baseGrad.addColorStop(1, 'transparent');
+
+          ctx.fillStyle = baseGrad;
+          ctx.fillRect(blockLeftX, blockTopY - 8, BLOCK_SIZE, 12);
+        }
+      }
+    }
+
+    ctx.restore();
+  };
+
+  // Dibujar tablero y piezas
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -390,6 +563,7 @@ export default function App() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Fondo y cuadrícula de fibra de carbono
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
     for (let x = 0; x <= canvas.width; x += BLOCK_SIZE) {
@@ -405,35 +579,65 @@ export default function App() {
       ctx.stroke();
     }
 
+    // Tablero acumulado
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const cell = gridRef.current[r][c];
-        if (cell !== 0) drawBlock(ctx, c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, String(cell));
+        if (cell !== 0) {
+          drawBlock(ctx, c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, String(cell));
+        }
       }
     }
 
+    // Pieza activa y fantasma
     const piece = currentPieceRef.current;
     if (piece && isPlayingRef.current) {
-      let ghostY = piece.y;
-      while (!checkCollision(piece.x, ghostY + 1, piece.matrix)) ghostY++;
+      drawPieceFallTrail(ctx, piece);
 
+      // Calcular posición fantasma
+      let ghostY = piece.y;
+      while (!checkCollision(piece.x, ghostY + 1, piece.matrix)) {
+        ghostY++;
+      }
+
+      // Dibujar fantasma
       if (ghostY > piece.y) {
         for (let r = 0; r < piece.matrix.length; r++) {
           for (let c = 0; c < piece.matrix[r].length; c++) {
-            if (piece.matrix[r][c]) drawBlock(ctx, (piece.x + c) * BLOCK_SIZE, (ghostY + r) * BLOCK_SIZE, BLOCK_SIZE, piece.type, true);
+            if (piece.matrix[r][c]) {
+              drawBlock(
+                ctx,
+                (piece.x + c) * BLOCK_SIZE,
+                (ghostY + r) * BLOCK_SIZE,
+                BLOCK_SIZE,
+                piece.type,
+                true
+              );
+            }
           }
         }
       }
 
+      // Dibujar pieza activa
       for (let r = 0; r < piece.matrix.length; r++) {
         for (let c = 0; c < piece.matrix[r].length; c++) {
-          if (piece.matrix[r][c]) drawBlock(ctx, (piece.x + c) * BLOCK_SIZE, (piece.y + r) * BLOCK_SIZE, BLOCK_SIZE, piece.type);
+          if (piece.matrix[r][c]) {
+            drawBlock(
+              ctx,
+              (piece.x + c) * BLOCK_SIZE,
+              (piece.y + r) * BLOCK_SIZE,
+              BLOCK_SIZE,
+              piece.type
+            );
+          }
         }
       }
     }
 
+    // Dibujar efectos de partículas de neón, estelas lumínicas y destellos láser
     particleSystemRef.current.draw(ctx, canvas.width);
 
+    // Previsualización pieza siguiente
     const nextCanvas = nextCanvasRef.current;
     if (nextCanvas) {
       const nCtx = nextCanvas.getContext('2d');
@@ -450,7 +654,9 @@ export default function App() {
 
           for (let r = 0; r < matrix.length; r++) {
             for (let c = 0; c < matrix[r].length; c++) {
-              if (matrix[r][c]) drawBlock(nCtx, sX + c * miniSize, sY + r * miniSize, miniSize, next.type);
+              if (matrix[r][c]) {
+                drawBlock(nCtx, sX + c * miniSize, sY + r * miniSize, miniSize, next.type);
+              }
             }
           }
         }
@@ -458,9 +664,11 @@ export default function App() {
     }
   }, [checkCollision]);
 
+  // Bucle de animación
   const gameLoop = useCallback(
     (time = 0) => {
       if (!isPlayingRef.current) return;
+
       const delta = time - lastTimeRef.current;
       lastTimeRef.current = time;
 
@@ -472,13 +680,16 @@ export default function App() {
         }
       }
 
+      // Actualizar física, estelas y ciclos de vida de partículas
       particleSystemRef.current.update();
+
       render();
       requestRef.current = requestAnimationFrame(gameLoop);
     },
     [softDrop, render]
   );
 
+  // Iniciar partida nueva
   const startNewGame = useCallback(
     (chosenPlayer?: PlayerProfile) => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -486,7 +697,7 @@ export default function App() {
       const activePlayer = chosenPlayer || player;
       if (activePlayer) {
         setPlayer(activePlayer);
-        localStorage.setItem('tetris_el_rey_player', JSON.stringify(activePlayer));
+        localStorage.setItem('tetris_device_locked_user', JSON.stringify(activePlayer));
       }
 
       gridRef.current = createEmptyGrid();
@@ -517,21 +728,126 @@ export default function App() {
     [player, getNextTetromino, spawnNextPiece, gameLoop]
   );
 
+  // Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isPlayingRef.current || isGameOver) return;
+
       switch (e.code) {
-        case 'ArrowLeft': case 'KeyA': e.preventDefault(); moveHorizontal(-1); break;
-        case 'ArrowRight': case 'KeyD': e.preventDefault(); moveHorizontal(1); break;
-        case 'ArrowDown': case 'KeyS': e.preventDefault(); softDrop(); break;
-        case 'ArrowUp': case 'KeyW': case 'KeyX': e.preventDefault(); tryRotatePiece(); break;
-        case 'Space': e.preventDefault(); hardDrop(); break;
-        case 'KeyP': case 'Escape': e.preventDefault(); togglePause(); break;
+        case 'ArrowLeft':
+        case 'KeyA':
+          e.preventDefault();
+          moveHorizontal(-1);
+          break;
+        case 'ArrowRight':
+        case 'KeyD':
+          e.preventDefault();
+          moveHorizontal(1);
+          break;
+        case 'ArrowDown':
+        case 'KeyS':
+          e.preventDefault();
+          softDrop();
+          break;
+        case 'ArrowUp':
+        case 'KeyW':
+        case 'KeyX':
+          e.preventDefault();
+          tryRotatePiece();
+          break;
+        case 'Space':
+          e.preventDefault();
+          hardDrop();
+          break;
+        case 'KeyP':
+        case 'Escape':
+          e.preventDefault();
+          togglePause();
+          break;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isGameOver, moveHorizontal, softDrop, tryRotatePiece, hardDrop, togglePause]);
+
+  // Gestos táctiles directos en el canvas
+  const touchTrackRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    accumulatedX: 0,
+    accumulatedY: 0,
+    startTime: 0,
+    hasMoved: false,
+  });
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1 && isPlayingRef.current && !isPaused) {
+      const t = e.touches[0];
+      touchTrackRef.current = {
+        active: true,
+        startX: t.clientX,
+        startY: t.clientY,
+        lastX: t.clientX,
+        lastY: t.clientY,
+        accumulatedX: 0,
+        accumulatedY: 0,
+        startTime: performance.now(),
+        hasMoved: false,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const track = touchTrackRef.current;
+    if (!track.active || e.touches.length !== 1) return;
+
+    const t = e.touches[0];
+    const dx = t.clientX - track.lastX;
+    const dy = t.clientY - track.lastY;
+    track.lastX = t.clientX;
+    track.lastY = t.clientY;
+    track.accumulatedX += dx;
+    track.accumulatedY += dy;
+
+    const thresholdX = 18;
+    const thresholdY = 22;
+
+    if (Math.abs(track.accumulatedX) >= thresholdX) {
+      const steps = Math.trunc(track.accumulatedX / thresholdX);
+      for (let i = 0; i < Math.abs(steps); i++) {
+        moveHorizontal(steps > 0 ? 1 : -1);
+      }
+      track.accumulatedX -= steps * thresholdX;
+      track.hasMoved = true;
+    }
+
+    if (track.accumulatedY >= thresholdY) {
+      const steps = Math.trunc(track.accumulatedY / thresholdY);
+      for (let i = 0; i < steps; i++) {
+        softDrop();
+      }
+      track.accumulatedY -= steps * thresholdY;
+      track.hasMoved = true;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    const track = touchTrackRef.current;
+    if (!track.active) return;
+
+    const elapsed = performance.now() - track.startTime;
+    const totalDist = Math.hypot(track.lastX - track.startX, track.lastY - track.startY);
+
+    // Tap rápido para rotar
+    if (!track.hasMoved && elapsed < 260 && totalDist < 14) {
+      tryRotatePiece();
+    }
+    track.active = false;
+  };
 
   const toggleSound = () => {
     sounds.enabled = !sounds.enabled;
@@ -540,60 +856,120 @@ export default function App() {
 
   return (
     <div className="casino-cosmic-bg w-full h-full h-dvh flex flex-col justify-between items-center overflow-hidden p-1 sm:p-2 relative bg-black">
+      {/* 1. ENCABEZADO SUPERIOR LIMPIO */}
       <header className="w-full max-w-xl flex items-center justify-between px-2 sm:px-4 py-1.5 z-20 flex-shrink-0">
+        {/* Título Neón y Subtítulo */}
         <div className="flex flex-col items-start justify-center">
           <h1 className="neon-tetris-title text-2xl sm:text-3xl">TETRIS</h1>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-widest text-[#38bdf8]">
+            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-widest text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.8)]">
               EL REY · VIP RETRO
             </span>
-            <div className="flex items-center gap-1 bg-[#061324] border border-[#38bdf8]/40 px-1.5 py-0.5 rounded-full">
-              <span className={`w-1.5 h-1.5 rounded-full ${firebaseConnected ? 'bg-[#22c55e]' : 'bg-amber-400'}`} />
-              <span className="font-mono text-[8px] font-black text-slate-300 hidden xs:inline">EN LÍNEA</span>
+            {/* Indicador de Conexión en Tiempo Real */}
+            <div
+              className="flex items-center gap-1 bg-[#061324] border border-[#38bdf8]/40 px-1.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.25)]"
+              title="Sistema en línea"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${firebaseConnected ? 'bg-[#22c55e] shadow-[0_0_6px_#22c55e]' : 'bg-amber-400'}`} />
+              <span className="font-mono text-[8px] font-black text-slate-300 hidden xs:inline">
+                EN LÍNEA
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button type="button" onClick={toggleSound} className="text-base sm:text-lg p-1 rounded bg-slate-900/60 border border-slate-700/60">
+        {/* Acciones Rápidas (Sonido, Récords, Admin, Siguiente Pieza) */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <button
+            type="button"
+            onClick={toggleSound}
+            className="text-base sm:text-lg hover:scale-110 active:scale-95 transition-transform p-1 rounded bg-slate-900/60 border border-slate-700/60"
+            title={soundEnabled ? 'Silenciar sonido' : 'Activar sonido'}
+            aria-label="Alternar sonido"
+          >
             {soundEnabled ? '🔊' : '🔇'}
           </button>
-          <button type="button" onClick={() => setShowLeaderboardModal(true)} className="text-base sm:text-lg p-1 rounded bg-slate-900/60 border border-slate-700/60 text-[#fde047]">
+
+          <button
+            type="button"
+            onClick={() => setShowLeaderboardModal(true)}
+            className="text-base sm:text-lg hover:scale-110 active:scale-95 transition-transform p-1 rounded bg-slate-900/60 border border-slate-700/60 text-[#fde047]"
+            title="Ver Salón de la Fama"
+            aria-label="Salón de la Fama"
+          >
             🏆
           </button>
+
+          {/* Botón Administración VIP */}
+          <button
+            type="button"
+            onClick={() => setShowAdminModal(true)}
+            className="text-xs sm:text-sm font-mono font-black hover:scale-105 active:scale-95 transition-transform px-2 py-1 rounded bg-[#eab308]/20 border border-[#eab308]/60 text-[#fde047] flex items-center gap-1 shadow-[0_0_8px_rgba(234,179,8,0.3)] cursor-pointer"
+            title="Panel de Administración (PIN rey777)"
+            aria-label="Administración"
+          >
+            <span>👑</span>
+            <span className="hidden sm:inline text-[10px]">ADMIN</span>
+          </button>
+
+          {/* Tarjeta NEXT superior derecha */}
           <div className="flex flex-col items-center">
-            <span className="font-mono text-[9px] font-black tracking-widest text-[#38bdf8] mb-0.5">NEXT</span>
-            <div className="w-[64px] h-[40px] bg-[#060b13] border-1.5 border-[#38bdf8] rounded-md flex items-center justify-center">
-              <canvas ref={nextCanvasRef} width={60} height={36} className="w-[58px] h-[34px]" />
+            <span className="font-mono text-[9px] font-black tracking-widest text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.9)] mb-0.5">
+              NEXT
+            </span>
+            <div className="w-[60px] sm:w-[64px] h-[38px] sm:h-[40px] bg-[#060b13] border-1.5 border-[#38bdf8] rounded-md flex items-center justify-center shadow-[0_0_10px_rgba(56,189,248,0.4),inset_0_0_8px_rgba(56,189,248,0.15)]">
+              <canvas ref={nextCanvasRef} width={60} height={36} className="w-[56px] h-[32px]" />
             </div>
           </div>
         </div>
       </header>
 
+      {/* 2. ÁREA CENTRAL: TABLERO A LA IZQUIERDA + HUD LATERAL A LA DERECHA */}
       <main className="flex-1 w-full max-w-xl flex items-center justify-center gap-2 sm:gap-4 px-2 min-h-0 overflow-hidden my-auto">
-        <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e] rounded-xl p-1 border-2 border-[#23344d] shadow-[0_0_24px_rgba(0,0,0,0.95)]">
-          <canvas ref={canvasRef} width={300} height={600} className="w-full h-full object-contain bg-[#070d17] rounded-lg touch-none" />
+        {/* Contenedor del Tablero */}
+        <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e] rounded-xl p-1 border-2 border-[#23344d] shadow-[0_0_24px_rgba(0,0,0,0.95),0_0_14px_rgba(56,189,248,0.25),inset_0_0_14px_rgba(0,0,0,0.9)] box-border">
+          <canvas
+            ref={canvasRef}
+            width={300}
+            height={600}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className="w-full h-full object-contain bg-[#070d17] rounded-lg shadow-[inset_0_0_12px_rgba(0,0,0,0.95)] touch-none cursor-pointer"
+          />
 
+          {/* Notificaciones flotantes de fichas ganadas */}
           {floatingChips.map((fc) => (
-            <div key={fc.id} className="chips-gain-toast">+{fc.amount}🪙</div>
+            <div key={fc.id} className="chips-gain-toast">
+              +{fc.amount}🪙
+            </div>
           ))}
 
+          {/* Toast de Obstáculos Basura Indestructibles */}
           {showGarbageToast && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-red-600/95 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 z-30">
-              <span>⚠️</span>
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-red-600/95 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-[0_0_14px_rgba(239,68,68,0.8)] z-30 animate-bounce">
+              <span className="text-base">⚠️</span>
               <div className="flex flex-col text-[10px] font-mono leading-tight">
-                <strong>¡OBSTÁCULO PELIGRO!</strong>
+                <strong className="tracking-wide">¡OBSTÁCULO PELIGRO!</strong>
                 <span>+3 Bloques Indestructibles</span>
               </div>
             </div>
           )}
 
+          {/* Capa de Pausa */}
           {isPaused && (
             <div className="absolute inset-0 bg-black/85 backdrop-blur-sm rounded-lg flex items-center justify-center z-40">
               <div className="text-center p-4">
                 <span className="text-3xl">⏸️</span>
-                <h2 className="font-mono text-2xl font-black text-[#38bdf8] my-1">PAUSA</h2>
-                <button type="button" onClick={togglePause} className="px-5 py-2 rounded-xl font-mono font-black text-xs bg-gradient-to-r from-[#fde047] via-[#eab308] to-[#ca8a04] text-slate-950 mt-2">
+                <h2 className="font-mono text-2xl font-black tracking-widest text-[#38bdf8] drop-shadow-[0_0_12px_rgba(56,189,248,0.9)] my-1">
+                  PAUSA
+                </h2>
+                <p className="font-mono text-[10px] text-slate-400 mb-3">TETRIS EL REY</p>
+                <button
+                  type="button"
+                  onClick={togglePause}
+                  className="px-5 py-2 rounded-xl font-mono font-black text-xs tracking-widest bg-gradient-to-r from-[#fde047] via-[#eab308] to-[#ca8a04] text-slate-950 shadow-[0_0_15px_rgba(234,179,8,0.6)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                >
                   CONTINUAR
                 </button>
               </div>
@@ -601,38 +977,71 @@ export default function App() {
           )}
         </div>
 
+        {/* Columna Lateral Derecha de Estadísticas */}
         <aside className="w-[82px] sm:w-[94px] flex flex-col justify-center items-center gap-2 sm:gap-3 flex-shrink-0">
-          <div className="w-full flex flex-col items-center justify-center p-1.5 bg-[#0e1524]/90 border border-[#38bdf8]/40 rounded-lg text-center">
-            <span className="font-mono text-[9px] font-black text-[#fde047] truncate max-w-[76px] uppercase">
+          {/* Badge de Jugador Registrado en Firebase */}
+          <div className="w-full flex flex-col items-center justify-center p-1.5 bg-[#0e1524]/90 border border-[#38bdf8]/40 rounded-lg shadow-[0_0_10px_rgba(56,189,248,0.25)] text-center">
+            <span className="font-mono text-[9px] font-black text-[#fde047] tracking-wider truncate max-w-[76px] drop-shadow-[0_0_6px_rgba(253,224,71,0.7)] uppercase">
               {player ? player.nickname : 'Invitado'}
             </span>
-            <span className="font-mono text-[10px] font-black text-[#38bdf8] mt-0.5">
+            <span className="font-mono text-[10px] font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_6px_rgba(56,189,248,0.85)] mt-0.5">
               #{player ? player.userCode : '0001'}
             </span>
           </div>
 
+          {/* Bloque SCORE */}
           <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black text-[#38bdf8]">SCORE</span>
-            <span className="font-mono text-sm sm:text-base font-black text-white">{score.toLocaleString()}</span>
+            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
+              SCORE
+            </span>
+            <span className="font-mono text-sm sm:text-base font-black text-white tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+              {score.toLocaleString()}
+            </span>
           </div>
 
+          {/* Bloque LEVEL */}
           <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black text-[#38bdf8]">LEVEL</span>
-            <span className="font-mono text-sm sm:text-base font-black text-[#38bdf8]">{String(level).padStart(2, '0')}</span>
+            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
+              LEVEL
+            </span>
+            <span className="font-mono text-sm sm:text-base font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_10px_rgba(56,189,248,0.9)]">
+              {String(level).padStart(2, '0')}
+            </span>
           </div>
 
+          {/* Bloque LINES */}
           <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black text-[#38bdf8]">LINES</span>
-            <span className="font-mono text-sm sm:text-base font-black text-[#f59e0b]">{String(lines).padStart(2, '0')}</span>
+            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
+              LINES
+            </span>
+            <span className="font-mono text-sm sm:text-base font-black text-[#f59e0b] tracking-widest drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]">
+              {String(lines).padStart(2, '0')}
+            </span>
           </div>
 
+          {/* Bloque FICHAS PARTIDA */}
           <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black text-[#fde047]">FICHAS</span>
-            <span className="font-mono text-xs sm:text-sm font-black text-[#fef08a]">{fichas.toLocaleString()}🪙</span>
+            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#4ade80] drop-shadow-[0_0_6px_rgba(74,222,128,0.85)]">
+              PARTIDA
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-[#86efac] tracking-wide">
+              +{fichas.toLocaleString()}🪙
+            </span>
+          </div>
+
+          {/* Bloque TOTAL ACUMULADO */}
+          <div className="flex flex-col items-center text-center">
+            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#fde047] drop-shadow-[0_0_6px_rgba(253,224,71,0.85)]">
+              TOTAL SALDO
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-[#fef08a] tracking-wide drop-shadow-[0_0_10px_rgba(254,240,138,0.8)]">
+              {((player?.totalFichas || 0) + (isGameOver ? 0 : fichas)).toLocaleString()}🪙
+            </span>
           </div>
         </aside>
       </main>
 
+      {/* 3. CONTROLES INFERIORES TÁCTILES FLUIDOS */}
       <Controls
         onMoveLeft={() => moveHorizontal(-1)}
         onMoveRight={() => moveHorizontal(1)}
@@ -643,9 +1052,42 @@ export default function App() {
         isPaused={isPaused}
       />
 
-      <LoginModal isOpen={showLoginModal} onSuccess={(p) => { setShowLoginModal(false); startNewGame(p); }} />
-      <PayoutModal isOpen={showPayoutModal} player={player} score={score} lines={lines} fichas={fichas} isMaxCap={isMaxCap} onPlayAgain={() => { setShowPayoutModal(false); startNewGame(); }} />
-      <LeaderboardModal isOpen={showLeaderboardModal} onClose={() => setShowLeaderboardModal(false)} />
+      {/* MODAL 1: REGISTRO / ACCESO CON CÓDIGO SECUENCIAL DE FIREBASE */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onSuccess={(profile) => {
+          setShowLoginModal(false);
+          startNewGame(profile);
+        }}
+      />
+
+      {/* MODAL 2: CUPÓN DE GANANCIAS Y COBRO POR WHATSAPP */}
+      <PayoutModal
+        isOpen={showPayoutModal}
+        player={player}
+        score={score}
+        lines={lines}
+        gameFichas={fichas}
+        totalAccumulatedFichas={(player?.totalFichas || 0) + (isGameOver ? 0 : fichas)}
+        isMaxCap={isMaxCap}
+        onPlayAgain={() => {
+          setShowPayoutModal(false);
+          startNewGame();
+        }}
+      />
+
+      {/* MODAL 3: SALÓN DE LA FAMA / HISTORIAL FIREBASE */}
+      <LeaderboardModal
+        isOpen={showLeaderboardModal}
+        onClose={() => setShowLeaderboardModal(false)}
+      />
+
+      {/* MODAL 4: PANEL DE ADMINISTRACIÓN VIP */}
+      <AdminModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        onUserDataChanged={refreshCurrentPlayer}
+      />
     </div>
   );
 }

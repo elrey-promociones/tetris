@@ -8,7 +8,7 @@ import {
 } from '../firebase';
 import { sounds } from '../audio';
 
-const DEFAULT_LOGO = '/logo.jpg';
+const DEFAULT_LOGO = './logo.jpg';
 const FALLBACK_LOGO = '/assets/aistudio/logo_369adc69.jpg';
 
 interface LoginModalProps {

@@ -24,7 +24,7 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 30; // 300x600 nativo (aspect-ratio 1:2)
 
-const TOPE_MAXIMO_FICHAS = 50000;
+const TOPE_MAXIMO_FICHAS = 10000;
 const FICHAS_POR_LINEA = 50;
 const BONIFICACION_TETRIS_FICHAS = 150;
 const PUNTOS_POR_LINEA = [0, 100, 300, 600, 1000];

@@ -96,6 +96,7 @@ export default function App() {
   const linesSinceLastGarbageRef = useRef<number>(0);
   const isPlayingRef = useRef<boolean>(false);
   const isPausedRef = useRef<boolean>(false);
+  const sessionFichasRef = useRef<number>(0);
   const particleSystemRef = useRef<NeonParticleSystem>(new NeonParticleSystem());
 
   function createEmptyGrid(): (string | number)[][] {
@@ -231,12 +232,19 @@ export default function App() {
 
   const [accumulatedFichasForModal, setAccumulatedFichasForModal] = useState<number>(0);
 
-  // Fin de Juego con actualización inmediata
+  // Fin de Juego con actualización inmediata (0 milisegundos de latencia)
   const triggerGameOver = useCallback(
-    (reachedMaxCap = false) => {
+    (reachedMaxCap = false, finalSessionFichas?: number) => {
       isPlayingRef.current = false;
       setIsGameOver(true);
       setIsMaxCap(reachedMaxCap);
+
+      const effectiveGameFichas = typeof finalSessionFichas === 'number'
+        ? finalSessionFichas
+        : sessionFichasRef.current;
+
+      setFichas(effectiveGameFichas);
+      sessionFichasRef.current = effectiveGameFichas;
 
       if (reachedMaxCap) {
         sounds.play('tetris');
@@ -250,8 +258,13 @@ export default function App() {
       // Cálculo instantáneo optimista del acumulado para cobrar sin esperar a internet
       const prevTotal = player?.totalFichas || 0;
       const isBlocked = !!player?.isBlocked;
-      const earnedFichas = isBlocked ? 0 : fichas;
-      const newAccumulated = Math.min(TOPE_MAXIMO_FICHAS, prevTotal + earnedFichas);
+      const earnedFichas = isBlocked ? 0 : effectiveGameFichas;
+
+      // Si alcanzó el tope máximo de 10,000 fichas, el total acumulado garantizado es exactamente 10,000
+      const newAccumulated = reachedMaxCap
+        ? TOPE_MAXIMO_FICHAS
+        : Math.min(TOPE_MAXIMO_FICHAS, prevTotal + earnedFichas);
+
       setAccumulatedFichasForModal(newAccumulated);
 
       if (player) {
@@ -262,31 +275,44 @@ export default function App() {
           gamesPlayed: (player.gamesPlayed || 0) + 1,
           isBlocked,
         };
+        // Actualización inmediata en memoria y almacenamiento local
         setPlayer(optimisticProfile);
         localStorage.setItem('tetris_device_locked_user', JSON.stringify(optimisticProfile));
         localStorage.setItem('tetris_el_rey_player', JSON.stringify(optimisticProfile));
 
+        // Las fichas que se mandan a Firestore para que el saldo llegue exactamente a 10,000
+        const fichasToRecord = isBlocked
+          ? 0
+          : reachedMaxCap
+            ? Math.max(0, TOPE_MAXIMO_FICHAS - prevTotal)
+            : earnedFichas;
+
+        // Guardado asíncrono en segundo plano en Firebase Firestore
         recordGameSession({
           userCode: player.userCode,
           nickname: player.nickname,
           score,
           lines,
           level,
-          fichas: earnedFichas,
+          fichas: fichasToRecord,
         }).then((updated) => {
           if (updated) {
-            setPlayer(updated);
-            localStorage.setItem('tetris_device_locked_user', JSON.stringify(updated));
-            localStorage.setItem('tetris_el_rey_player', JSON.stringify(updated));
+            const guaranteedProfile = reachedMaxCap
+              ? { ...updated, totalFichas: TOPE_MAXIMO_FICHAS }
+              : updated;
+            setPlayer(guaranteedProfile);
+            localStorage.setItem('tetris_device_locked_user', JSON.stringify(guaranteedProfile));
+            localStorage.setItem('tetris_el_rey_player', JSON.stringify(guaranteedProfile));
           }
         });
       }
 
       setShowPayoutModal(true);
     },
-    [player, score, lines, level, fichas]
+    [player, score, lines, level]
   );
 
+  // Obstáculos basura indestructibles
   const insertGarbageObstacles = useCallback((count = 3) => {
     let placed = 0;
     for (let i = 0; i < 30 && placed < count; i++) {
@@ -301,6 +327,7 @@ export default function App() {
     setTimeout(() => setShowGarbageToast(false), 2400);
   }, []);
 
+  // Aparición de nueva pieza
   const spawnNextPiece = useCallback(() => {
     currentPieceRef.current = nextPieceRef.current || getNextTetromino();
     nextPieceRef.current = getNextTetromino();
@@ -314,6 +341,7 @@ export default function App() {
     }
   }, [checkCollision, getNextTetromino, triggerGameOver]);
 
+  // Limpieza de líneas con efectos visuales de neón
   const clearFullLines = useCallback(() => {
     const clearedRows: number[] = [];
     for (let r = ROWS - 1; r >= 0; r--) {
@@ -346,9 +374,11 @@ export default function App() {
       setLines((prevLines) => {
         const newLines = prevLines + cleared;
 
+        // Puntos
         const addedScore = (PUNTOS_POR_LINEA[cleared] || 1000) * level;
         setScore((prev) => prev + addedScore);
 
+        // Sonidos de línea y tetris
         if (cleared === 4) {
           sounds.play('tetris');
           try {
@@ -358,30 +388,38 @@ export default function App() {
           sounds.play('line');
         }
 
+        // Fichas (solo si el usuario NO tiene los puntos bloqueados tras cobrar)
         if (!player?.isBlocked) {
           let addedFichas = cleared * FICHAS_POR_LINEA;
           if (cleared === 4) {
             addedFichas += BONIFICACION_TETRIS_FICHAS;
           }
 
-          setFichas((prevFichas) => {
-            const nextTotal = prevFichas + addedFichas;
-            const currentAccount = player?.totalFichas || 0;
-            if (currentAccount + nextTotal >= TOPE_MAXIMO_FICHAS || nextTotal >= TOPE_MAXIMO_FICHAS) {
-              triggerGameOver(true);
-              const remaining = Math.max(0, TOPE_MAXIMO_FICHAS - currentAccount);
-              return remaining > 0 ? remaining : nextTotal;
-            }
-            return nextTotal;
-          });
+          const currentAccount = player?.totalFichas || 0;
+          const prevSessionFichas = sessionFichasRef.current;
+          const nextSessionFichas = prevSessionFichas + addedFichas;
 
+          // Toast de fichas
           const toastId = Date.now() + Math.random();
           setFloatingChips((prev) => [...prev, { id: toastId, amount: addedFichas }]);
           setTimeout(() => {
             setFloatingChips((prev) => prev.filter((t) => t.id !== toastId));
           }, 1200);
+
+          if (currentAccount + nextSessionFichas >= TOPE_MAXIMO_FICHAS || nextSessionFichas >= TOPE_MAXIMO_FICHAS) {
+            // Alcanzó el tope de 10,000 fichas
+            const neededForCap = Math.max(0, TOPE_MAXIMO_FICHAS - currentAccount);
+            const cappedGameFichas = neededForCap > 0 ? neededForCap : nextSessionFichas;
+            sessionFichasRef.current = cappedGameFichas;
+            setFichas(cappedGameFichas);
+            triggerGameOver(true, cappedGameFichas);
+          } else {
+            sessionFichasRef.current = nextSessionFichas;
+            setFichas(nextSessionFichas);
+          }
         }
 
+        // Nivel y aceleración aumentada
         const nextLevel = Math.floor(newLines / LINEAS_POR_NIVEL) + 1;
         if (nextLevel > level) {
           setLevel(nextLevel);
@@ -393,6 +431,7 @@ export default function App() {
           dropIntervalRef.current = newSpeed;
         }
 
+        // Basura periódica
         linesSinceLastGarbageRef.current += cleared;
         if (linesSinceLastGarbageRef.current >= BASURA_INTERVALO_LINEAS) {
           insertGarbageObstacles(3);
@@ -404,6 +443,7 @@ export default function App() {
     }
   }, [level, triggerGameOver, insertGarbageObstacles, player]);
 
+  // Fijar pieza
   const lockPiece = useCallback(() => {
     if (!currentPieceRef.current) return;
     const { x, y, matrix, type } = currentPieceRef.current;
@@ -424,6 +464,7 @@ export default function App() {
     spawnNextPiece();
   }, [clearFullLines, spawnNextPiece, triggerGameOver]);
 
+  // Soft Drop
   const softDrop = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
     const piece = currentPieceRef.current;
@@ -435,6 +476,7 @@ export default function App() {
     }
   }, [checkCollision, lockPiece]);
 
+  // Hard Drop
   const hardDrop = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
     const piece = currentPieceRef.current;
@@ -445,12 +487,14 @@ export default function App() {
     lockPiece();
   }, [checkCollision, lockPiece]);
 
+  // Pausa
   const togglePause = useCallback(() => {
     if (isGameOver || !isPlayingRef.current) return;
     setIsPaused((prev) => !prev);
     sounds.play('click');
   }, [isGameOver]);
 
+  // Dibujo de bloques neón
   const drawBlock = (
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -476,13 +520,16 @@ export default function App() {
       ctx.fillStyle = grad;
       ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
 
+      // Bisel de luz
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x + 2, y + 2, size - 4, size - 4);
 
+      // Núcleo brillante
       ctx.fillStyle = colors.core || 'rgba(255, 255, 255, 0.6)';
       ctx.fillRect(x + 5, y + 5, 4, 4);
 
+      // Borde exterior
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
       ctx.lineWidth = 1;
       ctx.strokeRect(x, y, size, size);
@@ -491,6 +538,7 @@ export default function App() {
     ctx.restore();
   };
 
+  // Múltiples estelas láser ascendentes
   const drawPieceFallTrail = (ctx: CanvasRenderingContext2D, piece: TetrominoPiece) => {
     const colors = TETROMINO_COLORS[piece.type] || TETROMINO_COLORS.T;
     const { matrix, x, y } = piece;
@@ -554,6 +602,7 @@ export default function App() {
     ctx.restore();
   };
 
+  // Dibujar tablero y piezas
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -577,6 +626,7 @@ export default function App() {
       ctx.stroke();
     }
 
+    // Tablero acumulado
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const cell = gridRef.current[r][c];
@@ -586,6 +636,7 @@ export default function App() {
       }
     }
 
+    // Pieza activa y fantasma
     const piece = currentPieceRef.current;
     if (piece && isPlayingRef.current) {
       drawPieceFallTrail(ctx, piece);
@@ -627,8 +678,10 @@ export default function App() {
       }
     }
 
+    // Efectos de partículas de neón
     particleSystemRef.current.draw(ctx, canvas.width);
 
+    // Previsualización pieza siguiente
     const nextCanvas = nextCanvasRef.current;
     if (nextCanvas) {
       const nCtx = nextCanvas.getContext('2d');
@@ -655,6 +708,7 @@ export default function App() {
     }
   }, [checkCollision]);
 
+  // Bucle de animación
   const gameLoop = useCallback(
     (time = 0) => {
       if (!isPlayingRef.current) return;
@@ -677,6 +731,7 @@ export default function App() {
     [softDrop, render]
   );
 
+  // Iniciar partida nueva
   const startNewGame = useCallback(
     (chosenPlayer?: PlayerProfile) => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -699,6 +754,8 @@ export default function App() {
       setLines(0);
       setLevel(1);
       setFichas(0);
+      sessionFichasRef.current = 0;
+      setAccumulatedFichasForModal(0);
       setIsPaused(false);
       setIsGameOver(false);
       setIsMaxCap(false);
@@ -714,6 +771,7 @@ export default function App() {
     [player, getNextTetromino, spawnNextPiece, gameLoop]
   );
 
+  // Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isPlayingRef.current || isGameOver) return;
@@ -756,6 +814,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isGameOver, moveHorizontal, softDrop, tryRotatePiece, hardDrop, togglePause]);
 
+  // Gestos táctiles directos en el canvas (Drag & Tap)
   const touchTrackRef = useRef({
     active: false,
     startX: 0,
@@ -967,12 +1026,15 @@ export default function App() {
             )}
           </div>
 
+          {/* Bloque TOTAL ACUMULADO */}
           <div className={`w-full flex flex-col items-center text-center bg-[#070f1d]/80 border ${player?.isBlocked ? 'border-red-500/50' : 'border-amber-400/40'} rounded-lg py-1 px-0.5 shadow-[0_0_8px_rgba(234,179,8,0.2)] flex-shrink-0`}>
             <span className={`font-mono text-[8px] sm:text-[9px] font-black tracking-wider ${player?.isBlocked ? 'text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.8)]' : 'text-[#fde047] drop-shadow-[0_0_6px_rgba(253,224,71,0.85)]'}`}>
               {player?.isBlocked ? 'PUNTOS BLOQ.' : 'TOTAL SALDO'}
             </span>
             <span className="font-mono text-xs sm:text-sm font-black text-[#fef08a] tracking-wide drop-shadow-[0_0_10px_rgba(254,240,138,0.8)]">
-              {Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver || player?.isBlocked ? 0 : fichas)).toLocaleString()}🪙
+              {(isMaxCap
+                ? TOPE_MAXIMO_FICHAS
+                : Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver || player?.isBlocked ? 0 : fichas))).toLocaleString()}🪙
             </span>
           </div>
 
@@ -1050,7 +1112,7 @@ export default function App() {
         score={score}
         lines={lines}
         gameFichas={fichas}
-        totalAccumulatedFichas={accumulatedFichasForModal || Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + fichas)}
+        totalAccumulatedFichas={isMaxCap ? TOPE_MAXIMO_FICHAS : (accumulatedFichasForModal || Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + fichas))}
         isMaxCap={isMaxCap}
         onPlayAgain={() => {
           setShowPayoutModal(false);

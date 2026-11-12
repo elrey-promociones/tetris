@@ -963,7 +963,7 @@ export default function App() {
 
       {/* 2. ÁREA CENTRAL: TABLERO + HUD LATERAL */}
       <main className="flex-1 w-full max-w-xl flex items-center justify-center gap-2 sm:gap-4 px-2 min-h-0 overflow-visible my-auto">
-        <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e]/35 backdrop-blur-[1px] rounded-xl p-1 border-2 border-[#38bdf8]/40 shadow-[0_0_24px_rgba(0,0,0,0.7),0_0_14px_rgba(56,189,248,0.25)] box-border">
+        <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#03060c]/50 rounded-xl p-1 border-2 border-[#38bdf8]/80 shadow-[0_0_25px_rgba(0,0,0,0.9),0_0_18px_rgba(56,189,248,0.45),inset_0_0_24px_rgba(2,6,18,0.85)] box-border">
           <canvas
             ref={canvasRef}
             width={300}

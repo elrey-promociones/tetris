@@ -80,7 +80,6 @@ export async function testConnection(): Promise<boolean> {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase client offline, verificando conexión...');
     }
-    // Considerado conectado si el SDK responde o se comunica con el servidor
     return true;
   }
 }
@@ -143,6 +142,7 @@ export async function registerSequentialUser(nickname: string): Promise<PlayerPr
         highScore: 0,
         totalFichas: 0,
         gamesPlayed: 0,
+        isBlocked: false,
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
       };
@@ -156,6 +156,7 @@ export async function registerSequentialUser(nickname: string): Promise<PlayerPr
         highScore: 0,
         totalFichas: 0,
         gamesPlayed: 0,
+        isBlocked: false,
       } as PlayerProfile;
     });
 
@@ -189,6 +190,7 @@ export async function getExistingUserByCode(code: string): Promise<PlayerProfile
         highScore: data.highScore || 0,
         totalFichas: data.totalFichas || 0,
         gamesPlayed: data.gamesPlayed || 0,
+        isBlocked: !!data.isBlocked,
       };
     }
     return null;
@@ -200,6 +202,7 @@ export async function getExistingUserByCode(code: string): Promise<PlayerProfile
 /**
  * Guarda el registro de una partida, acumula las fichas al saldo del jugador
  * y retorna el perfil actualizado con el nuevo saldo acumulado.
+ * Si el usuario tiene los puntos bloqueados (isBlocked), no se suman nuevas fichas.
  */
 export async function recordGameSession(data: {
   userCode: string;
@@ -211,7 +214,6 @@ export async function recordGameSession(data: {
 }): Promise<PlayerProfile | null> {
   try {
     const recordsCol = collection(db, 'game_records');
-    // Guardar el registro de la partida en segundo plano simultáneamente (paralelo)
     const addRecordPromise = addDoc(recordsCol, {
       ...data,
       createdAt: new Date().toISOString(),
@@ -226,7 +228,9 @@ export async function recordGameSession(data: {
       const snap = await getDoc(userDocRef);
       if (snap.exists()) {
         const cur = snap.data();
-        const updatedFichas = Math.min(10000, (cur.totalFichas || 0) + data.fichas);
+        const isUserBlocked = !!cur.isBlocked;
+        const addedFichas = isUserBlocked ? 0 : data.fichas;
+        const updatedFichas = Math.min(10000, (cur.totalFichas || 0) + addedFichas);
         const updatedScore = Math.max(cur.highScore || 0, data.score);
         const updatedGames = (cur.gamesPlayed || 0) + 1;
 
@@ -241,7 +245,6 @@ export async function recordGameSession(data: {
           { merge: true }
         );
 
-        // Esperar a que ambas operaciones en paralelo concluyan
         await Promise.all([addRecordPromise, updatePromise]);
 
         return {
@@ -251,6 +254,7 @@ export async function recordGameSession(data: {
           highScore: updatedScore,
           totalFichas: updatedFichas,
           gamesPlayed: updatedGames,
+          isBlocked: isUserBlocked,
         };
       }
     }
@@ -280,17 +284,65 @@ export async function getAllUsers(): Promise<PlayerProfile[]> {
           highScore: data.highScore || 0,
           totalFichas: data.totalFichas || 0,
           gamesPlayed: data.gamesPlayed || 0,
+          isBlocked: !!data.isBlocked,
           createdAt: data.createdAt,
           lastActive: data.lastActive,
         });
       }
     });
-    // Ordenar de más reciente a más antiguo
     users.sort((a, b) => b.sequenceNumber - a.sequenceNumber);
     return users;
   } catch (err) {
     console.error('Error obteniendo lista de usuarios:', err);
     return [];
+  }
+}
+
+/**
+ * Bloquea o desbloquea la acumulación de puntos a un usuario específico
+ */
+export async function adminToggleUserBlock(sequenceNumber: number, isBlocked: boolean): Promise<void> {
+  const userDocRef = doc(db, 'users', `user_${sequenceNumber}`);
+  try {
+    await setDoc(
+      userDocRef,
+      {
+        isBlocked,
+        lastModifiedByAdmin: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `users/user_${sequenceNumber}`);
+  }
+}
+
+/**
+ * Bloquea o desbloquea la acumulación de puntos a TODOS los usuarios a la vez
+ */
+export async function adminBlockAllUsers(isBlocked: boolean): Promise<number> {
+  try {
+    const usersCol = collection(db, 'users');
+    const snap = await getDocs(usersCol);
+    const promises: Promise<void>[] = [];
+    snap.forEach((d) => {
+      const ref = doc(db, 'users', d.id);
+      promises.push(
+        setDoc(
+          ref,
+          {
+            isBlocked,
+            lastModifiedByAdmin: new Date().toISOString(),
+          },
+          { merge: true }
+        )
+      );
+    });
+    await Promise.all(promises);
+    return promises.length;
+  } catch (err) {
+    console.error('Error bloqueando/desbloqueando a todos:', err);
+    throw err;
   }
 }
 
@@ -315,10 +367,24 @@ export async function adminUpdateUserFichas(sequenceNumber: number, newFichas: n
 }
 
 /**
- * Resetea a 0 las fichas de un usuario una vez que cobra su premio
+ * Resetea a 0 las fichas de un usuario una vez que cobra su premio.
+ * Opcionalmente puede bloquearlo de inmediato si blockAfterReset es true.
  */
-export async function adminResetUserFichas(sequenceNumber: number): Promise<void> {
-  return adminUpdateUserFichas(sequenceNumber, 0);
+export async function adminResetUserFichas(sequenceNumber: number, blockAfterReset = false): Promise<void> {
+  const userDocRef = doc(db, 'users', `user_${sequenceNumber}`);
+  try {
+    await setDoc(
+      userDocRef,
+      {
+        totalFichas: 0,
+        isBlocked: blockAfterReset,
+        lastModifiedByAdmin: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `users/user_${sequenceNumber}`);
+  }
 }
 
 /**

@@ -1,4 +1,16 @@
+/**
+ * TETRIS EL REY - RETRO-FUTURISTA VIP
+ * Types and Data Definitions
+ */
+
 export type TetrominoType = 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z' | 'GARBAGE';
+
+export interface TetrominoColor {
+  core: string;
+  main: string;
+  dark: string;
+  glow: string;
+}
 
 export interface TetrominoPiece {
   type: TetrominoType;
@@ -14,6 +26,7 @@ export interface PlayerProfile {
   highScore: number;
   totalFichas: number;
   gamesPlayed: number;
+  isBlocked?: boolean;
   createdAt?: string;
   lastActive?: string;
 }
@@ -27,4 +40,11 @@ export interface GameRecord {
   level: number;
   fichas: number;
   createdAt: string;
+}
+
+export interface GameStats {
+  score: number;
+  lines: number;
+  level: number;
+  fichas: number;
 }

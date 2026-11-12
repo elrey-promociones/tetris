@@ -6,8 +6,8 @@ interface ControlsProps {
   onSoftDrop: () => void;
   onHardDrop: () => void;
   onRotate: () => void;
-  onTogglePause: () => void;
-  isPaused: boolean;
+  onTogglePause?: () => void;
+  isPaused?: boolean;
 }
 
 export const Controls: React.FC<ControlsProps> = ({
@@ -16,9 +16,8 @@ export const Controls: React.FC<ControlsProps> = ({
   onSoftDrop,
   onHardDrop,
   onRotate,
-  onTogglePause,
-  isPaused,
 }) => {
+  // Configuración de repetición ultra-fluida (DAS: Delayed Auto Shift, ARR: Auto Repeat Rate)
   const useFluidRepeat = (action: () => void, dasDelay = 125, arrInterval = 38) => {
     const dasTimerRef = useRef<NodeJS.Timeout | null>(null);
     const arrTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,47 +62,74 @@ export const Controls: React.FC<ControlsProps> = ({
   const rightHandlers = useFluidRepeat(onMoveRight, 120, 36);
   const downHandlers = useFluidRepeat(onSoftDrop, 90, 32);
 
+  const handleHardDrop = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onHardDrop();
+  };
+
+  const handleRotate = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onRotate();
+  };
+
   return (
-    <footer className="w-full flex items-end justify-between px-2 sm:px-4 py-2 select-none z-20 touch-none max-w-xl mx-auto">
-      {/* 1. D-PAD */}
-      <div className="flex flex-col items-center">
-        <span className="font-mono text-[10px] font-black text-[#4ade80] tracking-wider mb-1">UP</span>
-        <div className="dpad-cross-body">
-          <div className="cross-bar-horizontal" />
-          <div className="cross-bar-vertical" />
+    <footer className="w-full flex items-center justify-between px-2 sm:px-4 py-2 select-none z-20 touch-none max-w-xl mx-auto">
+      {/* 1. CONTROLES DIRECCIONALES AGRANDADOS (SIN UP, SOLO ◀, ▼, ▶) */}
+      <div className="dpad-t-cluster">
+        {/* Botón Izquierda ◀ */}
+        <button
+          type="button"
+          className="dpad-key-btn"
+          aria-label="Mover izquierda"
+          {...leftHandlers}
+        >
+          <span>◀</span>
+        </button>
 
-          <button type="button" className="dpad-key key-up" onPointerDown={onHardDrop}>▲</button>
-          <button type="button" className="dpad-key key-down" {...downHandlers}>▼</button>
-          <button type="button" className="dpad-key key-left" {...leftHandlers}>◀</button>
-          <button type="button" className="dpad-key key-right" {...rightHandlers}>▶</button>
-          <div className="dpad-center-circle" />
-        </div>
-      </div>
+        {/* Botón Abajo ▼ (Soft Drop) */}
+        <button
+          type="button"
+          className="dpad-key-btn btn-down"
+          aria-label="Bajar pieza"
+          {...downHandlers}
+        >
+          <span>▼</span>
+        </button>
 
-      {/* 2. PAUSA */}
-      <div className="flex flex-col items-center justify-center self-center mb-1 mx-2">
-        <button type="button" onClick={onTogglePause} className="btn-pause-retro">
-          <span className="text-sm leading-none">{isPaused ? '▶️' : '⏸️'}</span>
-          <span className="font-mono text-[9px] font-black tracking-wider text-[#38bdf8]">
-            {isPaused ? 'REANUDAR' : 'PAUSA'}
-          </span>
+        {/* Botón Derecha ▶ */}
+        <button
+          type="button"
+          className="dpad-key-btn"
+          aria-label="Mover derecha"
+          {...rightHandlers}
+        >
+          <span>▶</span>
         </button>
       </div>
 
-      {/* 3. ROTAR + DROP */}
-      <div className="flex flex-col items-end gap-1">
-        <div className="flex justify-between w-full px-1 font-mono text-[9px] font-black text-[#fde047]">
-          <span>LEFT</span>
-          <span>RIGHT</span>
-        </div>
+      {/* 2. CLUSTER DE ACCIÓN DERECHO AGRANDADO: ROTAR + A (SIN PALABRAS UP, RIGHT NI DROP) */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Botón ROTAR Dorado Ergonómico Agrandado */}
+        <button
+          type="button"
+          className="btn-rotate-pad"
+          aria-label="Rotar pieza"
+          onPointerDown={handleRotate}
+        >
+          <span className="rotate-label-debossed">ROTAR</span>
+        </button>
 
-        <div className="flex items-end gap-2 sm:gap-3">
-          <button type="button" className="btn-rotate-pad" onPointerDown={onRotate}>
-            <span className="rotate-label-debossed">ROTAR</span>
-          </button>
-          <button type="button" className="btn-round-action-a" onPointerDown={onHardDrop}>A</button>
-        </div>
-        <span className="font-mono text-[9px] font-black text-[#fde047] pr-1">DROP</span>
+        {/* Botón Redondo "A" (Hard Drop Instantáneo Agrandado) */}
+        <button
+          type="button"
+          className="btn-round-action-a"
+          aria-label="Caída dura A"
+          onPointerDown={handleHardDrop}
+        >
+          A
+        </button>
       </div>
     </footer>
   );

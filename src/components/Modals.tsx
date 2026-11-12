@@ -22,8 +22,6 @@ interface LoginModalProps {
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => {
   const [nickname, setNickname] = useState('');
-  const [mode, setMode] = useState<'new' | 'existing'>('new');
-  const [existingCode, setExistingCode] = useState('');
   const [nextSeqNum, setNextSeqNum] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,48 +40,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
     e.preventDefault();
     setError(null);
 
-    if (mode === 'new') {
-      if (!nickname.trim() || nickname.trim().length < 2) {
-        setError('Por favor escribe un apodo o nickname de al menos 2 caracteres.');
-        return;
-      }
+    if (!nickname.trim() || nickname.trim().length < 2) {
+      setError('Por favor escribe un apodo o nickname de al menos 2 caracteres.');
+      return;
+    }
 
-      setLoading(true);
-      try {
-        sounds.play('click');
-        const player = await registerSequentialUser(nickname);
-        // Bloquear permanentemente en el dispositivo
-        localStorage.setItem('tetris_device_locked_user', JSON.stringify(player));
-        onSuccess(player);
-      } catch (err) {
-        console.error('Error registrando usuario:', err);
-        setError('Error al registrar. Revisa tu conexión e intenta de nuevo.');
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      if (!existingCode.trim()) {
-        setError('Ingresa tu código numérico.');
-        return;
-      }
-
-      setLoading(true);
-      try {
-        sounds.play('click');
-        const existing = await getExistingUserByCode(existingCode);
-        if (existing) {
-          // Bloquear permanentemente en el dispositivo
-          localStorage.setItem('tetris_device_locked_user', JSON.stringify(existing));
-          onSuccess(existing);
-        } else {
-          setError(`No se encontró ningún jugador con el código #${existingCode}. Puedes ingresar como un nuevo jugador.`);
-        }
-      } catch (err) {
-        console.error('Error buscando código:', err);
-        setError('Error al consultar el código. Intenta de nuevo.');
-      } finally {
-        setLoading(false);
-      }
+    setLoading(true);
+    try {
+      sounds.play('click');
+      const player = await registerSequentialUser(nickname);
+      // Bloquear permanentemente en el dispositivo
+      localStorage.setItem('tetris_device_locked_user', JSON.stringify(player));
+      localStorage.setItem('tetris_el_rey_player', JSON.stringify(player));
+      onSuccess(player);
+    } catch (err) {
+      console.error('Error registrando usuario:', err);
+      setError('Error al registrar. Revisa tu conexión e intenta de nuevo.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,7 +67,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fadeIn overflow-y-auto">
       <div className="relative w-full max-w-sm sm:max-w-[420px] bg-gradient-to-b from-[#11192e]/95 via-[#0c1220]/95 to-[#060a12]/98 border-2 border-[#eab308] rounded-2xl pt-18 sm:pt-20 pb-5 px-5 sm:px-6 shadow-[0_25px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(234,179,8,0.35)] text-center overflow-visible my-auto">
         
-        {/* Insignia Circular Flotante Superior (Logo El Rey & Mattris) */}
+        {/* Insignia Circular Flotante Superior (Logo El Rey) */}
         <div className="absolute -top-12 sm:-top-14 left-1/2 -translate-x-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-3 border-[#fde047] shadow-[0_0_25px_rgba(234,179,8,0.7),inset_0_0_15px_rgba(234,179,8,0.4)] overflow-hidden bg-[#070b14] z-20 flex items-center justify-center">
           <img
             src={DEFAULT_LOGO}
@@ -129,106 +103,51 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
               TETRIS EL REY
             </h2>
             <p className="font-mono text-[9px] sm:text-[10px] tracking-widest text-slate-400 uppercase mt-0.5">
-              VINCULACIÓN ÚNICA DE DISPOSITIVO
+              REGISTRO ÚNICO DE DISPOSITIVO
             </p>
           </div>
 
           {/* Banner de Seguridad: Dispositivo permanente */}
-          <div className="bg-[#38bdf8]/10 border border-[#38bdf8]/40 rounded-lg p-2.5 mb-3.5 text-left">
+          <div className="bg-[#38bdf8]/10 border border-[#38bdf8]/40 rounded-lg p-2.5 mb-4 text-left">
             <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold text-[#38bdf8]">
               <span>🔒</span>
               <span>DISPOSITIVO VINCULADO AL REY</span>
             </div>
             <p className="font-sans text-[11px] text-slate-300 mt-0.5 leading-tight">
-              Una vez ingreses, este teléfono quedará registrado permanentemente con tu Código ID. Tus fichas se acumularán siempre en tu cuenta.
+              Ingresa tu apodo para comenzar. Este teléfono quedará registrado permanentemente con tu Código ID y acumularás fichas partida a partida.
             </p>
           </div>
 
-          {/* Selector de Modo */}
-          <div className="flex border border-slate-700/80 rounded-lg p-1 mb-4 bg-slate-900/70">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('new');
-                setError(null);
-              }}
-              className={`flex-1 py-1.5 font-mono text-[11px] font-bold rounded transition-all ${
-                mode === 'new'
-                  ? 'bg-[#eab308] text-slate-950 shadow-[0_0_10px_rgba(234,179,8,0.5)]'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              NUEVO JUGADOR
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('existing');
-                setError(null);
-              }}
-              className={`flex-1 py-1.5 font-mono text-[11px] font-bold rounded transition-all ${
-                mode === 'existing'
-                  ? 'bg-[#38bdf8] text-slate-950 shadow-[0_0_10px_rgba(56,189,248,0.5)]'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              VINCULAR CON MI CÓDIGO
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="text-left space-y-3.5">
-            {mode === 'new' ? (
-              <>
-                <div>
-                  <label className="block font-mono text-[10px] font-bold text-[#38bdf8] tracking-wider mb-1.5">
-                    APODO / NICKNAME
-                  </label>
-                  <input
-                    type="text"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    placeholder="Ej. Juan El Rey"
-                    maxLength={18}
-                    required
-                    autoFocus
-                    className="w-full bg-[#080d17] border border-[#38bdf8]/60 focus:border-[#38bdf8] focus:shadow-[0_0_14px_rgba(56,189,248,0.5)] rounded-lg px-3 py-2.5 text-white font-sans text-sm outline-none transition-all placeholder:text-slate-600"
-                  />
-                </div>
+            <div>
+              <label className="block font-mono text-[10px] font-bold text-[#38bdf8] tracking-wider mb-1.5">
+                APODO / NICKNAME
+              </label>
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="Ej. Juan El Rey"
+                maxLength={18}
+                required
+                autoFocus
+                className="w-full bg-[#080d17] border border-[#38bdf8]/60 focus:border-[#38bdf8] focus:shadow-[0_0_14px_rgba(56,189,248,0.5)] rounded-lg px-3 py-2.5 text-white font-sans text-sm outline-none transition-all placeholder:text-slate-600"
+              />
+            </div>
 
-                <div>
-                  <label className="block font-mono text-[10px] font-bold text-[#38bdf8] tracking-wider mb-1.5">
-                    TU CÓDIGO ID ASIGNADO
-                  </label>
-                  <div className="w-full bg-[#080d17] border border-slate-700 rounded-lg px-3 py-2.5 flex items-center justify-between">
-                    <span className="font-mono text-sm sm:text-base font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]">
-                      #{formattedNextCode}
-                    </span>
-                    <span className="font-mono text-[9px] font-bold text-[#fde047] uppercase bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
-                      ID ÚNICO
-                    </span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div>
-                <label className="block font-mono text-[10px] font-bold text-[#38bdf8] tracking-wider mb-1.5">
-                  INGRESA TU CÓDIGO EXISTENTE
-                </label>
-                <input
-                  type="text"
-                  value={existingCode}
-                  onChange={(e) => setExistingCode(e.target.value)}
-                  placeholder="Ej. 0001"
-                  maxLength={10}
-                  required
-                  autoFocus
-                  className="w-full bg-[#080d17] border border-[#38bdf8]/60 focus:border-[#38bdf8] focus:shadow-[0_0_14px_rgba(56,189,248,0.5)] rounded-lg px-3 py-2.5 text-[#fde047] font-mono font-bold text-center text-base outline-none transition-all placeholder:text-slate-600"
-                />
-                <p className="text-[10px] text-slate-400 italic mt-1.5 text-center">
-                  Este teléfono quedará vinculado permanentemente a este código.
-                </p>
+            <div>
+              <label className="block font-mono text-[10px] font-bold text-[#38bdf8] tracking-wider mb-1.5">
+                TU CÓDIGO ID ASIGNADO
+              </label>
+              <div className="w-full bg-[#080d17] border border-slate-700 rounded-lg px-3 py-2.5 flex items-center justify-between">
+                <span className="font-mono text-sm sm:text-base font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]">
+                  #{formattedNextCode}
+                </span>
+                <span className="font-mono text-[9px] font-bold text-[#fde047] uppercase bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/30">
+                  ID ÚNICO
+                </span>
               </div>
-            )}
+            </div>
 
             {error && (
               <div className="bg-red-500/20 border border-red-500/60 text-red-200 text-xs p-2 rounded-lg font-sans text-center">

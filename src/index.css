@@ -1,18 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --bg-deep: #000000;
+  --bg-deep: #080c14;
   --bg-surface: #0e1524;
   --carbon-dark: #070b12;
 
+  /* Neones Principales */
   --neon-orange: #ff6b35;
+  --neon-orange-glow: rgba(255, 107, 53, 0.85);
   --neon-cyan: #38bdf8;
+  --neon-cyan-glow: rgba(56, 189, 248, 0.85);
   --neon-green: #22c55e;
   --neon-green-bright: #4ade80;
+  --neon-green-glow: rgba(34, 197, 94, 0.85);
+
+  --gold-rotate: #eab308;
+  --gold-rotate-light: #fef08a;
+  --gold-rotate-dark: #a16207;
 
   --text-main: #f8fafc;
-  --font-mono: 'Orbitron', monospace;
+  --text-muted: #94a3b8;
+
+  --font-display: 'Cinzel', serif;
   --font-sans: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Orbitron', monospace;
+  --font-pixel: 'Press Start 2P', monospace, cursive;
 }
 
 *, *::before, *::after {
@@ -28,7 +40,7 @@ html, body {
   padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
-  background-color: #000000;
+  background-color: var(--bg-deep);
   color: var(--text-main);
   font-family: var(--font-sans);
   user-select: none;
@@ -43,7 +55,7 @@ html, body {
   height: 100vh;
   height: 100dvh;
   background-color: #000000;
-  background-image: url('./fondo.jpg'), url('fondo.jpg');
+  background-image: url('./fondo.jpg'), url('fondo.jpg'), url('/fondo.jpg');
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center center;
@@ -65,74 +77,72 @@ html, body {
   text-transform: uppercase;
 }
 
-/* D-PAD Cruceta Verde Neón */
-.dpad-cross-body {
-  position: relative;
-  width: 110px;
-  height: 110px;
+/* Resplandores y Efectos Neón */
+.glow-cyan {
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.85), 0 0 18px rgba(56, 189, 248, 0.4);
+}
+
+.glow-gold {
+  text-shadow: 0 0 8px rgba(234, 179, 8, 0.85), 0 0 20px rgba(234, 179, 8, 0.45);
+}
+
+.glow-green {
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.85), 0 0 18px rgba(34, 197, 94, 0.4);
+}
+
+.glow-orange {
+  text-shadow: 0 0 8px rgba(255, 107, 53, 0.85), 0 0 20px rgba(255, 107, 53, 0.45);
+}
+
+/* D-PAD Controles Direccionales Neón Agrandados (Sin botón UP) */
+.dpad-t-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(11, 19, 34, 0.85);
+  padding: 5px 8px;
+  border-radius: 18px;
+  border: 1.5px solid rgba(34, 197, 94, 0.45);
+  box-shadow: 
+    0 0 16px rgba(34, 197, 94, 0.25),
+    inset 0 0 12px rgba(0, 0, 0, 0.85);
+}
+
+.dpad-key-btn {
+  width: 52px;
+  height: 60px;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 2px solid var(--neon-green);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.cross-bar-horizontal {
-  position: absolute;
-  width: 108px;
-  height: 38px;
-  background: #0f172a;
-  border: 2px solid var(--neon-green);
-  border-radius: 10px;
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.7), inset 0 0 8px rgba(34, 197, 94, 0.2);
-}
-
-.cross-bar-vertical {
-  position: absolute;
-  width: 38px;
-  height: 108px;
-  background: #0f172a;
-  border: 2px solid var(--neon-green);
-  border-radius: 10px;
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.7), inset 0 0 8px rgba(34, 197, 94, 0.2);
-}
-
-.dpad-key {
-  position: absolute;
-  background: transparent;
-  border: none;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: var(--neon-green-bright);
-  font-size: 1.15rem;
-  text-shadow: 0 0 8px var(--neon-green);
-  z-index: 5;
-  transition: transform 0.05s ease, color 0.05s ease;
+  font-size: 1.45rem;
+  text-shadow: 0 0 10px var(--neon-green);
+  box-shadow: 
+    0 4px 10px rgba(0, 0, 0, 0.6),
+    0 0 12px rgba(34, 197, 94, 0.35),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  transition: transform 0.05s ease, box-shadow 0.05s ease, color 0.05s ease;
   touch-action: none;
 }
 
-.dpad-key:active {
-  transform: scale(0.88);
+.dpad-key-btn:active, .dpad-key-btn.active {
+  transform: scale(0.91);
   color: #fff;
-  text-shadow: 0 0 14px var(--neon-green);
+  background: linear-gradient(180deg, #15803d 0%, #0f172a 100%);
+  box-shadow: 
+    0 0 18px rgba(34, 197, 94, 0.85),
+    inset 0 0 8px rgba(0, 0, 0, 0.6);
 }
 
-.key-up { top: 0; left: 36px; width: 38px; height: 38px; }
-.key-down { bottom: 0; left: 36px; width: 38px; height: 38px; }
-.key-left { left: 0; top: 36px; width: 38px; height: 38px; }
-.key-right { right: 0; top: 36px; width: 38px; height: 38px; }
-
-.dpad-center-circle {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #080c14;
-  border: 1.5px solid rgba(34, 197, 94, 0.5);
-  z-index: 4;
+.dpad-key-btn.btn-down {
+  border-color: #4ade80;
 }
 
-/* Botón de Pausa */
+/* Botón de Pausa Retro */
 .btn-pause-retro {
   background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
   border: 1.5px solid #38bdf8;
@@ -144,68 +154,88 @@ html, body {
   justify-content: center;
   gap: 2px;
   cursor: pointer;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.35), 0 3px 6px rgba(0, 0, 0, 0.6);
+  box-shadow: 
+    0 0 12px rgba(56, 189, 248, 0.35),
+    0 3px 6px rgba(0, 0, 0, 0.6),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.08s ease;
   touch-action: none;
 }
 
-.btn-pause-retro:active {
+.btn-pause-retro:active, .btn-pause-retro.active {
   transform: scale(0.92);
   border-color: #fde047;
+  box-shadow: 0 0 14px rgba(253, 224, 71, 0.6);
 }
 
-/* Botón ROTAR Dorado */
+/* Botón ROTAR Dorado Ergonómico Agrandado */
 .btn-rotate-pad {
   position: relative;
-  width: 104px;
-  height: 58px;
+  width: 124px;
+  height: 62px;
   background: linear-gradient(145deg, #fde047 0%, #eab308 55%, #ca8a04 100%);
   border: 2px solid #fef08a;
-  border-radius: 14px 14px 30px 14px;
+  border-radius: 16px 16px 30px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 0 18px rgba(234, 179, 8, 0.55), 0 4px 10px rgba(0, 0, 0, 0.6);
+  box-shadow: 
+    0 0 22px rgba(234, 179, 8, 0.6),
+    0 4px 12px rgba(0, 0, 0, 0.7),
+    inset 0 2px 4px rgba(255, 255, 255, 0.85),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.4);
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
   touch-action: none;
 }
 
-.btn-rotate-pad:active {
+.btn-rotate-pad:active, .btn-rotate-pad.active {
   transform: scale(0.93);
-  box-shadow: 0 0 26px rgba(234, 179, 8, 0.85);
+  box-shadow: 
+    0 0 30px rgba(234, 179, 8, 0.95),
+    inset 0 0 10px rgba(0, 0, 0, 0.6);
 }
 
 .rotate-label-debossed {
   font-family: var(--font-mono);
-  font-size: 0.92rem;
+  font-size: 1.15rem;
   font-weight: 900;
   color: #171203;
-  letter-spacing: 1.5px;
+  letter-spacing: 2px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-/* Botón Redondo "A" (Hard Drop) */
+/* Botón Redondo "A" (Hard Drop) Agrandado */
 .btn-round-action-a {
-  width: 42px;
-  height: 42px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #334155 0%, #1e293b 60%, #0f172a 100%);
-  border: 2px solid #64748b;
+  border: 2px solid #38bdf8;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  box-shadow: 
+    0 0 14px rgba(56, 189, 248, 0.45),
+    0 4px 10px rgba(0, 0, 0, 0.7),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4);
   color: #f1f5f9;
   font-family: var(--font-mono);
-  font-size: 0.98rem;
+  font-size: 1.25rem;
   font-weight: 900;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+  transition: transform 0.05s ease, border-color 0.05s ease, box-shadow 0.05s ease;
   touch-action: none;
 }
 
-.btn-round-action-a:active {
+.btn-round-action-a:active, .btn-round-action-a.active {
   transform: scale(0.92);
   border-color: #f59e0b;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.85);
 }
 
-/* Toast flotante de fichas */
+/* Toast flotante de fichas ganadas */
 .chips-gain-toast {
   position: absolute;
   top: 12px;
@@ -229,4 +259,13 @@ html, body {
   20% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
   80% { opacity: 1; transform: translate(-50%, -10px) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -24px) scale(0.9); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.8)); }
+  50% { opacity: 0.75; filter: drop-shadow(0 0 16px rgba(56, 189, 248, 1)); }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite;
 }

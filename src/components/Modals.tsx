@@ -221,20 +221,20 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
             className="w-full h-full object-cover object-center"
           />
         </div>
+<div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden z-0">
+  <img
+    src={DEFAULT_LOGO}
+    onError={(e) => {
+      if (!e.currentTarget.src.includes(FALLBACK_LOGO)) {
+        e.currentTarget.src = FALLBACK_LOGO;
+      }
+    }}
+    alt=""
+    className="w-full h-full object-cover object-top opacity-70 scale-105 contrast-110 saturate-125"
+  />
+  <div className="absolute inset-0 bg-gradient-to-b from-[#070b14]/15 via-[#070b14]/65 to-[#04070e]/95" />
+</div>
 
-        <div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden z-0">
-          <img
-            src={DEFAULT_LOGO}
-            onError={(e) => {
-              if (!e.currentTarget.src.includes(FALLBACK_LOGO)) {
-                e.currentTarget.src = FALLBACK_LOGO;
-              }
-            }}
-            alt=""
-            className="w-full h-full object-cover opacity-10 filter blur-[1px] scale-125 translate-y-6"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#11192e]/80 via-[#0c1220]/90 to-[#060a12]/98" />
-        </div>
 
         <div className="relative z-10">
           <div className="flex items-center justify-center gap-2 sm:gap-3 mb-4 mt-1">

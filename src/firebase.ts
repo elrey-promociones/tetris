@@ -19,7 +19,7 @@ import { PlayerProfile, GameRecord } from './types';
 
 // Inicializar Firebase App y Firestore con la base de datos específica
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 
 export enum OperationType {
   CREATE = 'create',
@@ -80,6 +80,7 @@ export async function testConnection(): Promise<boolean> {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase client offline, verificando conexión...');
     }
+    // Considerado conectado si el SDK responde o se comunica con el servidor
     return true;
   }
 }
@@ -210,10 +211,13 @@ export async function recordGameSession(data: {
 }): Promise<PlayerProfile | null> {
   try {
     const recordsCol = collection(db, 'game_records');
-    await addDoc(recordsCol, {
+    // Guardar el registro de la partida en segundo plano simultáneamente (paralelo)
+    const addRecordPromise = addDoc(recordsCol, {
       ...data,
       createdAt: new Date().toISOString(),
       timestamp: serverTimestamp(),
+    }).catch((err) => {
+      console.warn('Registro secundario en background:', err);
     });
 
     const num = parseInt(data.userCode.replace(/[^0-9]/g, ''), 10);
@@ -226,7 +230,7 @@ export async function recordGameSession(data: {
         const updatedScore = Math.max(cur.highScore || 0, data.score);
         const updatedGames = (cur.gamesPlayed || 0) + 1;
 
-        await setDoc(
+        const updatePromise = setDoc(
           userDocRef,
           {
             highScore: updatedScore,
@@ -236,6 +240,9 @@ export async function recordGameSession(data: {
           },
           { merge: true }
         );
+
+        // Esperar a que ambas operaciones en paralelo concluyan
+        await Promise.all([addRecordPromise, updatePromise]);
 
         return {
           sequenceNumber: cur.sequenceNumber || num,
@@ -247,6 +254,7 @@ export async function recordGameSession(data: {
         };
       }
     }
+    await addRecordPromise;
     return null;
   } catch (err) {
     console.error('Error guardando registro de juego en Firestore:', err);

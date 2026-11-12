@@ -108,7 +108,6 @@ export default function App() {
       setFirebaseConnected(connected);
     });
 
-    // Cargar perfil permanente vinculado al dispositivo
     const deviceUserRaw =
       localStorage.getItem('tetris_device_locked_user') ||
       localStorage.getItem('tetris_el_rey_player');
@@ -120,8 +119,6 @@ export default function App() {
           setPlayer(parsed);
           setShowLoginModal(false);
 
-          // Sincronizar de inmediato con Firestore para tener el saldo acumulado real
-          // (por si el administrador reseteó o modificó las fichas en el panel)
           getExistingUserByCode(parsed.userCode).then((fresh) => {
             if (fresh) {
               setPlayer(fresh);
@@ -149,7 +146,6 @@ export default function App() {
     }
   }, [player?.userCode]);
 
-  // Actualizar ref de pausa
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
@@ -193,7 +189,6 @@ export default function App() {
     []
   );
 
-  // Rotación
   const rotateMatrix = (matrix: number[][]): number[][] => {
     const N = matrix.length;
     const result = Array.from({ length: N }, () => Array(N).fill(0));
@@ -222,7 +217,6 @@ export default function App() {
     }
   }, [checkCollision]);
 
-  // Movimiento horizontal
   const moveHorizontal = useCallback(
     (dir: number) => {
       if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
@@ -237,7 +231,7 @@ export default function App() {
 
   const [accumulatedFichasForModal, setAccumulatedFichasForModal] = useState<number>(0);
 
-  // Fin de Juego con actualización inmediata (0 milisegundos de latencia)
+  // Fin de Juego con actualización inmediata
   const triggerGameOver = useCallback(
     (reachedMaxCap = false) => {
       isPlayingRef.current = false;
@@ -255,7 +249,9 @@ export default function App() {
 
       // Cálculo instantáneo optimista del acumulado para cobrar sin esperar a internet
       const prevTotal = player?.totalFichas || 0;
-      const newAccumulated = Math.min(TOPE_MAXIMO_FICHAS, prevTotal + fichas);
+      const isBlocked = !!player?.isBlocked;
+      const earnedFichas = isBlocked ? 0 : fichas;
+      const newAccumulated = Math.min(TOPE_MAXIMO_FICHAS, prevTotal + earnedFichas);
       setAccumulatedFichasForModal(newAccumulated);
 
       if (player) {
@@ -264,20 +260,19 @@ export default function App() {
           totalFichas: newAccumulated,
           highScore: Math.max(player.highScore || 0, score),
           gamesPlayed: (player.gamesPlayed || 0) + 1,
+          isBlocked,
         };
-        // Actualización inmediata en memoria y almacenamiento local
         setPlayer(optimisticProfile);
         localStorage.setItem('tetris_device_locked_user', JSON.stringify(optimisticProfile));
         localStorage.setItem('tetris_el_rey_player', JSON.stringify(optimisticProfile));
 
-        // Guardado asíncrono en segundo plano en Firebase Firestore
         recordGameSession({
           userCode: player.userCode,
           nickname: player.nickname,
           score,
           lines,
           level,
-          fichas,
+          fichas: earnedFichas,
         }).then((updated) => {
           if (updated) {
             setPlayer(updated);
@@ -292,7 +287,6 @@ export default function App() {
     [player, score, lines, level, fichas]
   );
 
-  // Obstáculos basura indestructibles
   const insertGarbageObstacles = useCallback((count = 3) => {
     let placed = 0;
     for (let i = 0; i < 30 && placed < count; i++) {
@@ -307,7 +301,6 @@ export default function App() {
     setTimeout(() => setShowGarbageToast(false), 2400);
   }, []);
 
-  // Aparición de nueva pieza
   const spawnNextPiece = useCallback(() => {
     currentPieceRef.current = nextPieceRef.current || getNextTetromino();
     nextPieceRef.current = getNextTetromino();
@@ -321,7 +314,6 @@ export default function App() {
     }
   }, [checkCollision, getNextTetromino, triggerGameOver]);
 
-  // Limpieza de líneas con efectos visuales de neón
   const clearFullLines = useCallback(() => {
     const clearedRows: number[] = [];
     for (let r = ROWS - 1; r >= 0; r--) {
@@ -344,7 +336,6 @@ export default function App() {
     if (clearedRows.length > 0) {
       const cleared = clearedRows.length;
 
-      // Disparar explosión de partículas tipo estela de neón y destellos láser
       particleSystemRef.current.triggerLineClear(
         clearedRows,
         cleared === 4,
@@ -355,14 +346,10 @@ export default function App() {
       setLines((prevLines) => {
         const newLines = prevLines + cleared;
 
-        // Puntos
         const addedScore = (PUNTOS_POR_LINEA[cleared] || 1000) * level;
         setScore((prev) => prev + addedScore);
 
-        // Fichas
-        let addedFichas = cleared * FICHAS_POR_LINEA;
         if (cleared === 4) {
-          addedFichas += BONIFICACION_TETRIS_FICHAS;
           sounds.play('tetris');
           try {
             confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
@@ -371,30 +358,34 @@ export default function App() {
           sounds.play('line');
         }
 
-        setFichas((prevFichas) => {
-          const nextTotal = prevFichas + addedFichas;
-          const currentAccount = player?.totalFichas || 0;
-          if (currentAccount + nextTotal >= TOPE_MAXIMO_FICHAS || nextTotal >= TOPE_MAXIMO_FICHAS) {
-            triggerGameOver(true);
-            const remaining = Math.max(0, TOPE_MAXIMO_FICHAS - currentAccount);
-            return remaining > 0 ? remaining : nextTotal;
+        if (!player?.isBlocked) {
+          let addedFichas = cleared * FICHAS_POR_LINEA;
+          if (cleared === 4) {
+            addedFichas += BONIFICACION_TETRIS_FICHAS;
           }
-          return nextTotal;
-        });
 
-        // Toast de fichas
-        const toastId = Date.now() + Math.random();
-        setFloatingChips((prev) => [...prev, { id: toastId, amount: addedFichas }]);
-        setTimeout(() => {
-          setFloatingChips((prev) => prev.filter((t) => t.id !== toastId));
-        }, 1200);
+          setFichas((prevFichas) => {
+            const nextTotal = prevFichas + addedFichas;
+            const currentAccount = player?.totalFichas || 0;
+            if (currentAccount + nextTotal >= TOPE_MAXIMO_FICHAS || nextTotal >= TOPE_MAXIMO_FICHAS) {
+              triggerGameOver(true);
+              const remaining = Math.max(0, TOPE_MAXIMO_FICHAS - currentAccount);
+              return remaining > 0 ? remaining : nextTotal;
+            }
+            return nextTotal;
+          });
 
-        // Nivel y aceleración aumentada
+          const toastId = Date.now() + Math.random();
+          setFloatingChips((prev) => [...prev, { id: toastId, amount: addedFichas }]);
+          setTimeout(() => {
+            setFloatingChips((prev) => prev.filter((t) => t.id !== toastId));
+          }, 1200);
+        }
+
         const nextLevel = Math.floor(newLines / LINEAS_POR_NIVEL) + 1;
         if (nextLevel > level) {
           setLevel(nextLevel);
           sounds.play('level');
-          // Curva de velocidad aumentada: 720ms * 0.82^(nivel-1)
           const newSpeed = Math.max(
             VELOCIDAD_MINIMA_MS,
             Math.floor(VELOCIDAD_INICIAL_MS * Math.pow(FACTOR_ACELERACION, nextLevel - 1))
@@ -402,7 +393,6 @@ export default function App() {
           dropIntervalRef.current = newSpeed;
         }
 
-        // Basura periódica
         linesSinceLastGarbageRef.current += cleared;
         if (linesSinceLastGarbageRef.current >= BASURA_INTERVALO_LINEAS) {
           insertGarbageObstacles(3);
@@ -412,9 +402,8 @@ export default function App() {
         return newLines;
       });
     }
-  }, [level, triggerGameOver, insertGarbageObstacles]);
+  }, [level, triggerGameOver, insertGarbageObstacles, player]);
 
-  // Fijar pieza
   const lockPiece = useCallback(() => {
     if (!currentPieceRef.current) return;
     const { x, y, matrix, type } = currentPieceRef.current;
@@ -435,7 +424,6 @@ export default function App() {
     spawnNextPiece();
   }, [clearFullLines, spawnNextPiece, triggerGameOver]);
 
-  // Soft Drop
   const softDrop = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
     const piece = currentPieceRef.current;
@@ -447,7 +435,6 @@ export default function App() {
     }
   }, [checkCollision, lockPiece]);
 
-  // Hard Drop
   const hardDrop = useCallback(() => {
     if (!currentPieceRef.current || isPausedRef.current || !isPlayingRef.current) return;
     const piece = currentPieceRef.current;
@@ -458,14 +445,12 @@ export default function App() {
     lockPiece();
   }, [checkCollision, lockPiece]);
 
-  // Pausa
   const togglePause = useCallback(() => {
     if (isGameOver || !isPlayingRef.current) return;
     setIsPaused((prev) => !prev);
     sounds.play('click');
   }, [isGameOver]);
 
-  // Dibujo de bloques neón
   const drawBlock = (
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -491,16 +476,13 @@ export default function App() {
       ctx.fillStyle = grad;
       ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
 
-      // Bisel de luz
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x + 2, y + 2, size - 4, size - 4);
 
-      // Núcleo brillante
       ctx.fillStyle = colors.core || 'rgba(255, 255, 255, 0.6)';
       ctx.fillRect(x + 5, y + 5, 4, 4);
 
-      // Borde exterior
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
       ctx.lineWidth = 1;
       ctx.strokeRect(x, y, size, size);
@@ -509,7 +491,6 @@ export default function App() {
     ctx.restore();
   };
 
-  // Múltiples estelas láser ascendentes
   const drawPieceFallTrail = (ctx: CanvasRenderingContext2D, piece: TetrominoPiece) => {
     const colors = TETROMINO_COLORS[piece.type] || TETROMINO_COLORS.T;
     const { matrix, x, y } = piece;
@@ -534,7 +515,6 @@ export default function App() {
           const trailHeight = Math.min(blockTopY, BLOCK_SIZE * 3.3);
           const trailTopY = blockTopY - trailHeight;
 
-          // Franja difusa
           const streamGrad = ctx.createLinearGradient(0, blockTopY, 0, trailTopY);
           streamGrad.addColorStop(0, colors.glow.replace(/[\d.]+\)$/, '0.75)'));
           streamGrad.addColorStop(0.3, colors.glow.replace(/[\d.]+\)$/, '0.35)'));
@@ -544,7 +524,6 @@ export default function App() {
           ctx.fillStyle = streamGrad;
           ctx.fillRect(blockLeftX + 3, trailTopY, BLOCK_SIZE - 6, trailHeight);
 
-          // Línea láser central
           const laserGrad = ctx.createLinearGradient(0, blockTopY, 0, trailTopY);
           laserGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
           laserGrad.addColorStop(0.25, colors.core || 'rgba(255, 255, 255, 0.7)');
@@ -554,7 +533,6 @@ export default function App() {
           ctx.fillStyle = laserGrad;
           ctx.fillRect(blockLeftX + BLOCK_SIZE / 2 - 1.5, trailTopY, 3, trailHeight);
 
-          // Destello en la base
           const baseGrad = ctx.createRadialGradient(
             blockLeftX + BLOCK_SIZE / 2,
             blockTopY,
@@ -576,7 +554,6 @@ export default function App() {
     ctx.restore();
   };
 
-  // Dibujar tablero y piezas
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -585,7 +562,6 @@ export default function App() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Fondo y cuadrícula de fibra de carbono
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
     for (let x = 0; x <= canvas.width; x += BLOCK_SIZE) {
@@ -601,7 +577,6 @@ export default function App() {
       ctx.stroke();
     }
 
-    // Tablero acumulado
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const cell = gridRef.current[r][c];
@@ -611,18 +586,15 @@ export default function App() {
       }
     }
 
-    // Pieza activa y fantasma
     const piece = currentPieceRef.current;
     if (piece && isPlayingRef.current) {
       drawPieceFallTrail(ctx, piece);
 
-      // Calcular posición fantasma
       let ghostY = piece.y;
       while (!checkCollision(piece.x, ghostY + 1, piece.matrix)) {
         ghostY++;
       }
 
-      // Dibujar fantasma
       if (ghostY > piece.y) {
         for (let r = 0; r < piece.matrix.length; r++) {
           for (let c = 0; c < piece.matrix[r].length; c++) {
@@ -640,7 +612,6 @@ export default function App() {
         }
       }
 
-      // Dibujar pieza activa
       for (let r = 0; r < piece.matrix.length; r++) {
         for (let c = 0; c < piece.matrix[r].length; c++) {
           if (piece.matrix[r][c]) {
@@ -656,10 +627,8 @@ export default function App() {
       }
     }
 
-    // Dibujar efectos de partículas de neón, estelas lumínicas y destellos láser
     particleSystemRef.current.draw(ctx, canvas.width);
 
-    // Previsualización pieza siguiente
     const nextCanvas = nextCanvasRef.current;
     if (nextCanvas) {
       const nCtx = nextCanvas.getContext('2d');
@@ -686,7 +655,6 @@ export default function App() {
     }
   }, [checkCollision]);
 
-  // Bucle de animación
   const gameLoop = useCallback(
     (time = 0) => {
       if (!isPlayingRef.current) return;
@@ -702,16 +670,13 @@ export default function App() {
         }
       }
 
-      // Actualizar física, estelas y ciclos de vida de partículas
       particleSystemRef.current.update();
-
       render();
       requestRef.current = requestAnimationFrame(gameLoop);
     },
     [softDrop, render]
   );
 
-  // Iniciar partida nueva
   const startNewGame = useCallback(
     (chosenPlayer?: PlayerProfile) => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -740,7 +705,6 @@ export default function App() {
       setShowPayoutModal(false);
 
       particleSystemRef.current.clear();
-
       bagRef.current = [];
       nextPieceRef.current = getNextTetromino();
       spawnNextPiece();
@@ -750,7 +714,6 @@ export default function App() {
     [player, getNextTetromino, spawnNextPiece, gameLoop]
   );
 
-  // Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isPlayingRef.current || isGameOver) return;
@@ -793,7 +756,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isGameOver, moveHorizontal, softDrop, tryRotatePiece, hardDrop, togglePause]);
 
-  // Gestos táctiles directos en el canvas (Drag & Tap)
   const touchTrackRef = useRef({
     active: false,
     startX: 0,
@@ -864,7 +826,6 @@ export default function App() {
     const elapsed = performance.now() - track.startTime;
     const totalDist = Math.hypot(track.lastX - track.startX, track.lastY - track.startY);
 
-    // Tap rápido para rotar
     if (!track.hasMoved && elapsed < 260 && totalDist < 14) {
       tryRotatePiece();
     }
@@ -878,16 +839,14 @@ export default function App() {
 
   return (
     <div className="casino-cosmic-bg w-full h-full h-dvh flex flex-col justify-between items-center overflow-hidden p-1 sm:p-2 relative bg-black">
-      {/* 1. ENCABEZADO SUPERIOR LIMPIO (SIN BARRAS SIMULADAS DE CELULAR) */}
+      {/* 1. ENCABEZADO SUPERIOR */}
       <header className="w-full max-w-xl flex items-center justify-between px-2 sm:px-4 py-1.5 z-20 flex-shrink-0">
-        {/* Título Neón y Subtítulo */}
         <div className="flex flex-col items-start justify-center">
           <h1 className="neon-tetris-title text-2xl sm:text-3xl">TETRIS</h1>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-widest text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.8)]">
               EL REY · VIP RETRO
             </span>
-            {/* Indicador de Conexión en Tiempo Real */}
             <div
               className="flex items-center gap-1 bg-[#061324] border border-[#38bdf8]/40 px-1.5 py-0.5 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.25)]"
               title="Sistema en línea"
@@ -900,7 +859,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Acciones Rápidas (Sonido, Récords, Admin, Siguiente Pieza) */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
           <button
             type="button"
@@ -922,7 +880,6 @@ export default function App() {
             🏆
           </button>
 
-          {/* Botón Administración VIP */}
           <button
             type="button"
             onClick={() => setShowAdminModal(true)}
@@ -934,7 +891,6 @@ export default function App() {
             <span className="hidden sm:inline text-[10px]">ADMIN</span>
           </button>
 
-          {/* Tarjeta NEXT superior derecha */}
           <div className="flex flex-col items-center">
             <span className="font-mono text-[9px] font-black tracking-widest text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.9)] mb-0.5">
               NEXT
@@ -946,9 +902,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. ÁREA CENTRAL: TABLERO A LA IZQUIERDA + HUD LATERAL A LA DERECHA */}
+      {/* 2. ÁREA CENTRAL: TABLERO + HUD LATERAL */}
       <main className="flex-1 w-full max-w-xl flex items-center justify-center gap-2 sm:gap-4 px-2 min-h-0 overflow-visible my-auto">
-        {/* Contenedor del Tablero */}
         <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e] rounded-xl p-1 border-2 border-[#23344d] shadow-[0_0_24px_rgba(0,0,0,0.95),0_0_14px_rgba(56,189,248,0.25),inset_0_0_14px_rgba(0,0,0,0.9)] box-border">
           <canvas
             ref={canvasRef}
@@ -960,14 +915,12 @@ export default function App() {
             className="w-full h-full object-contain bg-[#070d17] rounded-lg shadow-[inset_0_0_12px_rgba(0,0,0,0.95)] touch-none cursor-pointer"
           />
 
-          {/* Notificaciones flotantes de fichas ganadas */}
           {floatingChips.map((fc) => (
             <div key={fc.id} className="chips-gain-toast">
               +{fc.amount}🪙
             </div>
           ))}
 
-          {/* Toast de Obstáculos Basura Indestructibles */}
           {showGarbageToast && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-red-600/95 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-[0_0_14px_rgba(239,68,68,0.8)] z-30 animate-bounce">
               <span className="text-base">⚠️</span>
@@ -978,7 +931,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Capa de Pausa */}
           {isPaused && (
             <div className="absolute inset-0 bg-black/85 backdrop-blur-sm rounded-lg flex items-center justify-center z-40">
               <div className="text-center p-4">
@@ -1001,7 +953,6 @@ export default function App() {
 
         {/* Columna Lateral Derecha de Estadísticas */}
         <aside className="w-[82px] sm:w-[94px] flex flex-col justify-start items-center gap-1.5 sm:gap-2 flex-shrink-0 z-20">
-          {/* Badge de Jugador Registrado en Firebase */}
           <div className="w-full flex flex-col items-center justify-center p-1 bg-[#0e1524]/90 border border-[#38bdf8]/40 rounded-lg shadow-[0_0_10px_rgba(56,189,248,0.25)] text-center flex-shrink-0">
             <span className="font-mono text-[9px] font-black text-[#fde047] tracking-wider truncate max-w-[76px] drop-shadow-[0_0_6px_rgba(253,224,71,0.7)] uppercase">
               {player ? player.nickname : 'Invitado'}
@@ -1009,19 +960,22 @@ export default function App() {
             <span className="font-mono text-[10px] font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_6px_rgba(56,189,248,0.85)] mt-0.5">
               #{player ? player.userCode : '0001'}
             </span>
+            {player?.isBlocked && (
+              <span className="mt-0.5 bg-red-500/25 border border-red-500/80 text-red-300 text-[7px] font-black px-1 py-0.5 rounded tracking-tighter" title="Acumulación de puntos bloqueada">
+                🔒 BLOQUEADO
+              </span>
+            )}
           </div>
 
-          {/* Bloque TOTAL ACUMULADO (A LA DERECHA ARRIBA) */}
-          <div className="w-full flex flex-col items-center text-center bg-[#070f1d]/80 border border-amber-400/40 rounded-lg py-1 px-0.5 shadow-[0_0_8px_rgba(234,179,8,0.2)] flex-shrink-0">
-            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#fde047] drop-shadow-[0_0_6px_rgba(253,224,71,0.85)]">
-              TOTAL SALDO
+          <div className={`w-full flex flex-col items-center text-center bg-[#070f1d]/80 border ${player?.isBlocked ? 'border-red-500/50' : 'border-amber-400/40'} rounded-lg py-1 px-0.5 shadow-[0_0_8px_rgba(234,179,8,0.2)] flex-shrink-0`}>
+            <span className={`font-mono text-[8px] sm:text-[9px] font-black tracking-wider ${player?.isBlocked ? 'text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.8)]' : 'text-[#fde047] drop-shadow-[0_0_6px_rgba(253,224,71,0.85)]'}`}>
+              {player?.isBlocked ? 'PUNTOS BLOQ.' : 'TOTAL SALDO'}
             </span>
             <span className="font-mono text-xs sm:text-sm font-black text-[#fef08a] tracking-wide drop-shadow-[0_0_10px_rgba(254,240,138,0.8)]">
-              {Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver ? 0 : fichas)).toLocaleString()}🪙
+              {Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver || player?.isBlocked ? 0 : fichas)).toLocaleString()}🪙
             </span>
           </div>
 
-          {/* BOTÓN DE PAUSA COLOCADO A LA DERECHA ARRIBA DEBAJO DE TOTAL SALDO */}
           <button
             type="button"
             onClick={togglePause}
@@ -1035,7 +989,6 @@ export default function App() {
             </span>
           </button>
 
-          {/* Bloque SCORE */}
           <div className="flex flex-col items-center text-center flex-shrink-0">
             <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
               SCORE
@@ -1045,7 +998,6 @@ export default function App() {
             </span>
           </div>
 
-          {/* Bloque LEVEL */}
           <div className="flex flex-col items-center text-center flex-shrink-0">
             <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
               LEVEL
@@ -1055,7 +1007,6 @@ export default function App() {
             </span>
           </div>
 
-          {/* Bloque LINES */}
           <div className="flex flex-col items-center text-center flex-shrink-0">
             <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
               LINES
@@ -1065,7 +1016,6 @@ export default function App() {
             </span>
           </div>
 
-          {/* Bloque FICHAS PARTIDA */}
           <div className="flex flex-col items-center text-center flex-shrink-0">
             <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#4ade80] drop-shadow-[0_0_6px_rgba(74,222,128,0.85)]">
               PARTIDA
@@ -1077,7 +1027,7 @@ export default function App() {
         </aside>
       </main>
 
-      {/* 3. CONTROLES INFERIORES TÁCTILES FLUIDOS Y AGRANDADOS */}
+      {/* 3. CONTROLES INFERIORES */}
       <Controls
         onMoveLeft={() => moveHorizontal(-1)}
         onMoveRight={() => moveHorizontal(1)}
@@ -1086,7 +1036,6 @@ export default function App() {
         onRotate={tryRotatePiece}
       />
 
-      {/* MODAL 1: REGISTRO / ACCESO CON CÓDIGO SECUENCIAL DE FIREBASE */}
       <LoginModal
         isOpen={showLoginModal}
         onSuccess={(profile) => {
@@ -1095,7 +1044,6 @@ export default function App() {
         }}
       />
 
-      {/* MODAL 2: CUPÓN DE GANANCIAS Y COBRO POR WHATSAPP (0ms de espera) */}
       <PayoutModal
         isOpen={showPayoutModal}
         player={player}
@@ -1110,13 +1058,11 @@ export default function App() {
         }}
       />
 
-      {/* MODAL 3: SALÓN DE LA FAMA / HISTORIAL FIREBASE */}
       <LeaderboardModal
         isOpen={showLeaderboardModal}
         onClose={() => setShowLeaderboardModal(false)}
       />
 
-      {/* MODAL 4: PANEL DE ADMINISTRACIÓN VIP */}
       <AdminModal
         isOpen={showAdminModal}
         onClose={() => setShowAdminModal(false)}

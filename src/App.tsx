@@ -963,7 +963,7 @@ export default function App() {
 
       {/* 2. ÁREA CENTRAL: TABLERO + HUD LATERAL */}
       <main className="flex-1 w-full max-w-xl flex items-center justify-center gap-2 sm:gap-4 px-2 min-h-0 overflow-visible my-auto">
-        <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e] rounded-xl p-1 border-2 border-[#23344d] shadow-[0_0_24px_rgba(0,0,0,0.95),0_0_14px_rgba(56,189,248,0.25),inset_0_0_14px_rgba(0,0,0,0.9)] box-border">
+        <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e]/35 backdrop-blur-[1px] rounded-xl p-1 border-2 border-[#38bdf8]/40 shadow-[0_0_24px_rgba(0,0,0,0.7),0_0_14px_rgba(56,189,248,0.25)] box-border">
           <canvas
             ref={canvasRef}
             width={300}
@@ -971,8 +971,9 @@ export default function App() {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            className="w-full h-full object-contain bg-[#070d17] rounded-lg shadow-[inset_0_0_12px_rgba(0,0,0,0.95)] touch-none cursor-pointer"
+            className="w-full h-full object-contain bg-transparent rounded-lg touch-none cursor-pointer"
           />
+          
 
           {floatingChips.map((fc) => (
             <div key={fc.id} className="chips-gain-toast">

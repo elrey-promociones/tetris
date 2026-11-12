@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { PlayerProfile, GameRecord } from '../types';
 import {
   registerSequentialUser,
-  getExistingUserByCode,
   getNextAvailableSequenceNumber,
   getTopLeaderboard,
   getAllUsers,
   adminUpdateUserFichas,
   adminResetUserFichas,
   adminUpdateUserNickname,
+  adminToggleUserBlock,
+  adminBlockAllUsers,
 } from '../firebase';
 import { sounds } from '../audio';
 
@@ -49,7 +50,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
     try {
       sounds.play('click');
       const player = await registerSequentialUser(nickname);
-      // Bloquear permanentemente en el dispositivo
       localStorage.setItem('tetris_device_locked_user', JSON.stringify(player));
       localStorage.setItem('tetris_el_rey_player', JSON.stringify(player));
       onSuccess(player);
@@ -67,7 +67,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fadeIn overflow-y-auto">
       <div className="relative w-full max-w-sm sm:max-w-[420px] bg-gradient-to-b from-[#11192e]/95 via-[#0c1220]/95 to-[#060a12]/98 border-2 border-[#eab308] rounded-2xl pt-18 sm:pt-20 pb-5 px-5 sm:px-6 shadow-[0_25px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(234,179,8,0.35)] text-center overflow-visible my-auto">
         
-        {/* Insignia Circular Flotante Superior (Logo El Rey) */}
         <div className="absolute -top-12 sm:-top-14 left-1/2 -translate-x-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-3 border-[#fde047] shadow-[0_0_25px_rgba(234,179,8,0.7),inset_0_0_15px_rgba(234,179,8,0.4)] overflow-hidden bg-[#070b14] z-20 flex items-center justify-center">
           <img
             src={DEFAULT_LOGO}
@@ -81,7 +80,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
           />
         </div>
 
-        {/* Marca de agua sutil de fondo */}
         <div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden z-0">
           <img
             src={DEFAULT_LOGO}
@@ -97,7 +95,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
         </div>
 
         <div className="relative z-10">
-          {/* Título y Subtítulo */}
           <div className="mb-4 mt-1 text-center">
             <h2 className="font-mono text-xl sm:text-2xl font-black tracking-widest text-[#f59e0b] drop-shadow-[0_0_12px_rgba(245,158,11,0.8)] uppercase">
               TETRIS EL REY
@@ -107,7 +104,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
             </p>
           </div>
 
-          {/* Banner de Seguridad: Dispositivo permanente */}
           <div className="bg-[#38bdf8]/10 border border-[#38bdf8]/40 rounded-lg p-2.5 mb-4 text-left">
             <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold text-[#38bdf8]">
               <span>🔒</span>
@@ -171,7 +167,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
             </button>
           </form>
 
-          {/* Firma inferior Mattris */}
           <div className="mt-4 pt-1 font-mono text-[9px] tracking-widest text-slate-500 uppercase text-center">
             MATTRIS INC.
           </div>
@@ -214,7 +209,6 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fadeIn overflow-y-auto">
       <div className="relative w-full max-w-sm sm:max-w-[420px] bg-gradient-to-b from-[#11192e]/95 via-[#0c1220]/95 to-[#060a12]/98 border-2 border-[#eab308] rounded-2xl pt-18 sm:pt-20 pb-5 px-5 sm:px-6 shadow-[0_25px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(234,179,8,0.4)] text-center overflow-visible my-auto">
 
-        {/* Insignia Circular Flotante Superior (Logo El Rey & Mattris) */}
         <div className="absolute -top-12 sm:-top-14 left-1/2 -translate-x-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-3 border-[#fde047] shadow-[0_0_25px_rgba(234,179,8,0.7),inset_0_0_15px_rgba(234,179,8,0.4)] overflow-hidden bg-[#070b14] z-20 flex items-center justify-center">
           <img
             src={DEFAULT_LOGO}
@@ -228,7 +222,6 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
           />
         </div>
 
-        {/* Marca de agua sutil de fondo */}
         <div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden z-0">
           <img
             src={DEFAULT_LOGO}
@@ -244,7 +237,6 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
         </div>
 
         <div className="relative z-10">
-          {/* Encabezado con Trofeos gemelos a los lados */}
           <div className="flex items-center justify-center gap-2 sm:gap-3 mb-4 mt-1">
             <span className="text-2xl sm:text-3xl filter drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]">🏆</span>
             <div className="text-center">
@@ -264,7 +256,6 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
             </div>
           )}
 
-          {/* Ticket de Ganancias */}
           <div className="bg-[#080d17]/90 border border-slate-700/80 rounded-xl p-3.5 mb-3 font-mono space-y-2 text-left shadow-[inset_0_0_15px_rgba(0,0,0,0.8)]">
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400 font-bold tracking-wider">JUGADOR:</span>
@@ -299,14 +290,25 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
             </div>
           </div>
 
-          {/* Aviso de acumulabilidad y reseteo por el administrador */}
-          <div className="bg-[#0b1320] border border-amber-400/30 rounded-lg p-2 mb-3 text-left">
-            <p className="font-sans text-[10px] text-slate-300 leading-tight">
-              🪙 <strong className="text-[#fde047]">Fichas 100% acumulables:</strong> Se suman partida a partida. Solo el administrador puede descontarlas o regresarlas a 0 una vez pagado tu premio.
-            </p>
-          </div>
+          {/* Aviso si la cuenta tiene los puntos bloqueados o estado de acumulación */}
+          {player?.isBlocked ? (
+            <div className="bg-red-950/50 border border-red-500/70 rounded-lg p-2.5 mb-3 text-left shadow-[0_0_12px_rgba(239,68,68,0.3)]">
+              <div className="flex items-center gap-1.5 text-red-300 font-black text-xs">
+                <span>🔒</span>
+                <span>PUNTOS BLOQUEADOS POR COBRO DE PREMIO</span>
+              </div>
+              <p className="font-sans text-[10px] text-red-200/90 mt-1 leading-tight">
+                Tu premio anterior ya fue cobrado o la administración pausó la acumulación. Puedes seguir jugando en modo arcade, pero no se sumarán nuevas fichas hasta que el administrador reactive tu cuenta.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-[#0b1320] border border-amber-400/30 rounded-lg p-2 mb-3 text-left">
+              <p className="font-sans text-[10px] text-slate-300 leading-tight">
+                🪙 <strong className="text-[#fde047]">Fichas 100% acumulables:</strong> Se suman partida a partida. Solo el administrador puede descontarlas o regresarlas a 0 una vez pagado tu premio.
+              </p>
+            </div>
+          )}
 
-          {/* Botones de acción */}
           <div className="space-y-2.5">
             <a
               href={whatsappUrl}
@@ -326,11 +328,10 @@ export const PayoutModal: React.FC<PayoutModalProps> = ({
               }}
               className="w-full py-2.5 px-4 rounded-xl font-mono font-bold text-xs tracking-wider border-1.5 border-[#eab308] text-[#fde047] hover:bg-[#eab308]/15 active:scale-[0.98] transition-all cursor-pointer"
             >
-              🔄 SEGUIR JUGANDO Y ACUMULANDO
+              {player?.isBlocked ? '🔄 SEGUIR JUGANDO (MODO ARCADE)' : '🔄 SEGUIR JUGANDO Y ACUMULANDO'}
             </button>
           </div>
 
-          {/* Marca de pie de página MATTRIS INC. */}
           <div className="mt-4 pt-1 font-mono text-[9px] tracking-widest text-slate-500 uppercase text-center">
             MATTRIS INC.
           </div>
@@ -440,9 +441,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
   const [actionType, setActionType] = useState<'reset' | 'modify' | 'edit_name' | null>(null);
   const [customFichas, setCustomFichas] = useState<string>('');
   const [customNickname, setCustomNickname] = useState<string>('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [blockAfterReset, setBlockAfterReset] = useState(true);
+  const DEFAULT_MASTER_PIN = 'rey777';
+  const currentPin = localStorage.getItem('tetris_custom_admin_pin') || DEFAULT_MASTER_PIN;
 
-  const MASTER_PIN = 'rey777'; // PIN de Acceso Administrativo
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [newPinInput, setNewPinInput] = useState('');
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [pinChangeError, setPinChangeError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -477,7 +484,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
   if (!isAuthenticated) {
     const handleLoginPin = (e: React.FormEvent) => {
       e.preventDefault();
-      if (pinInput.trim() === MASTER_PIN || pinInput.trim() === 'admin123' || pinInput.trim() === '1234') {
+      const entered = pinInput.trim();
+      if (entered === currentPin || entered === DEFAULT_MASTER_PIN) {
         sounds.play('tetris');
         setIsAuthenticated(true);
         setPinError(null);
@@ -513,9 +521,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                 autoFocus
                 className="w-full bg-[#080d17] border border-[#eab308]/60 focus:border-[#fde047] rounded-lg px-3 py-2.5 text-white font-mono text-center tracking-widest text-lg outline-none"
               />
-              <span className="block text-[9px] text-slate-500 text-center mt-1 font-mono">
-                (PIN por defecto: rey777)
-              </span>
             </div>
 
             {pinError && (
@@ -553,13 +558,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
 
   const totalFichasEnSistema = users.reduce((acc, u) => acc + (u.totalFichas || 0), 0);
 
+  // Ejecución de acciones
   const handleExecuteReset = async () => {
     if (!selectedUser) return;
     setLoading(true);
     try {
       sounds.play('drop');
-      await adminResetUserFichas(selectedUser.sequenceNumber);
-      showToast(`¡Fichas de #${selectedUser.userCode} reseteadas a 0 (Premio Cobrado)!`);
+      await adminResetUserFichas(selectedUser.sequenceNumber, blockAfterReset);
+      showToast(`¡Premio cobrado! Fichas de #${selectedUser.userCode} a 0${blockAfterReset ? ' (Puntos bloqueados)' : ''}.`);
       setActionType(null);
       setSelectedUser(null);
       await loadAllUsers();
@@ -572,11 +578,48 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
     }
   };
 
+  const handleToggleBlock = async (u: PlayerProfile) => {
+    const nextStatus = !u.isBlocked;
+    setLoading(true);
+    try {
+      sounds.play('click');
+      await adminToggleUserBlock(u.sequenceNumber, nextStatus);
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.sequenceNumber === u.sequenceNumber ? { ...item, isBlocked: nextStatus } : item
+        )
+      );
+      showToast(nextStatus ? `🔒 Puntos bloqueados para ${u.nickname} (#${u.userCode})` : `🔓 Puntos desbloqueados para ${u.nickname} (#${u.userCode})`);
+      if (onUserDataChanged) onUserDataChanged();
+    } catch (err) {
+      console.error(err);
+      showToast('Error al cambiar bloqueo de usuario.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBlockAll = async (blocked: boolean) => {
+    setLoading(true);
+    try {
+      sounds.play('drop');
+      const count = await adminBlockAllUsers(blocked);
+      setUsers((prev) => prev.map((item) => ({ ...item, isBlocked: blocked })));
+      showToast(blocked ? `🔒 Puntos bloqueados a ${count} jugadores` : `🔓 Puntos desbloqueados a ${count} jugadores`);
+      if (onUserDataChanged) onUserDataChanged();
+    } catch (err) {
+      console.error(err);
+      showToast('Error al modificar usuarios en masa.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExecuteModifyFichas = async () => {
     if (!selectedUser) return;
     const val = parseInt(customFichas, 10);
     if (isNaN(val) || val < 0) {
-      alert('Por favor ingresa un número válido mayor o igual a 0.');
+      showToast('Ingresa un número válido mayor o igual a 0.');
       return;
     }
     setLoading(true);
@@ -599,7 +642,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
   const handleExecuteEditName = async () => {
     if (!selectedUser) return;
     if (!customNickname.trim()) {
-      alert('Escribe un apodo válido.');
+      showToast('Escribe un apodo válido.');
       return;
     }
     setLoading(true);
@@ -623,7 +666,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-fadeIn">
       <div className="relative w-full max-w-2xl bg-gradient-to-b from-[#0f172a] via-[#090f1d] to-[#04070e] border-2 border-[#eab308] rounded-2xl p-4 sm:p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95),0_0_30px_rgba(234,179,8,0.35)] flex flex-col max-h-[90vh]">
         
-        {/* Notificación flotante Toast */}
         {toastMessage && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#22c55e] text-slate-950 font-mono font-black text-xs px-4 py-2 rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.8)] z-50 animate-bounce">
             {toastMessage}
@@ -639,7 +681,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                 PANEL ADMINISTRATIVO EL REY
               </h2>
               <span className="font-mono text-[9px] text-[#38bdf8] font-bold">
-                GESTIÓN DE JUGADORES Y COBROS EN FIRESTORE
+                GESTIÓN DE JUGADORES, COBROS Y BLOQUEO DE PUNTOS
               </span>
             </div>
           </div>
@@ -664,22 +706,53 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
         </div>
 
         {/* Métricas rápidas */}
-        <div className="grid grid-cols-2 gap-2 my-3">
-          <div className="bg-[#091122] border border-slate-800 rounded-xl p-2.5 text-center">
+        <div className="grid grid-cols-2 gap-2 my-2.5">
+          <div className="bg-[#091122] border border-slate-800 rounded-xl p-2 text-center">
             <span className="font-mono text-[10px] text-slate-400 uppercase block font-bold">
               JUGADORES REGISTRADOS
             </span>
-            <span className="font-mono text-xl sm:text-2xl font-black text-[#38bdf8]">
+            <span className="font-mono text-lg sm:text-2xl font-black text-[#38bdf8]">
               {users.length}
             </span>
           </div>
-          <div className="bg-[#091122] border border-slate-800 rounded-xl p-2.5 text-center">
+          <div className="bg-[#091122] border border-slate-800 rounded-xl p-2 text-center">
             <span className="font-mono text-[10px] text-slate-400 uppercase block font-bold">
               FICHAS EN CIRCULACIÓN
             </span>
-            <span className="font-mono text-xl sm:text-2xl font-black text-[#fde047]">
+            <span className="font-mono text-lg sm:text-2xl font-black text-[#fde047]">
               {totalFichasEnSistema.toLocaleString()} 🪙
             </span>
+          </div>
+        </div>
+
+        {/* Control Global de Bloqueo de Puntos para Todos los Usuarios */}
+        <div className="bg-[#060c18] border border-slate-800 rounded-xl p-2.5 mb-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-md">
+          <div className="flex items-center gap-2 text-left w-full sm:w-auto">
+            <span className="text-xl">🛡️</span>
+            <div>
+              <span className="font-mono text-xs font-black text-white block">CONTROL GLOBAL DE BLOQUEO</span>
+              <span className="font-mono text-[9px] text-slate-400">Bloquea o desbloquea acumular fichas a todos</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => handleBlockAll(true)}
+              disabled={loading}
+              className="flex-1 sm:flex-none px-3 py-1.5 rounded-lg bg-red-600/25 border border-red-500/80 hover:bg-red-600/40 text-red-200 font-mono font-black text-[10px] tracking-wider transition-all cursor-pointer shadow-[0_0_8px_rgba(239,68,68,0.3)] flex items-center justify-center gap-1"
+              title="Bloquear puntos a todos los jugadores"
+            >
+              <span>🔒 BLOQUEAR TODOS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBlockAll(false)}
+              disabled={loading}
+              className="flex-1 sm:flex-none px-3 py-1.5 rounded-lg bg-emerald-600/25 border border-emerald-500/80 hover:bg-emerald-600/40 text-emerald-200 font-mono font-black text-[10px] tracking-wider transition-all cursor-pointer shadow-[0_0_8px_rgba(34,197,94,0.3)] flex items-center justify-center gap-1"
+              title="Desbloquear puntos a todos los jugadores"
+            >
+              <span>🔓 DESBLOQUEAR TODOS</span>
+            </button>
           </div>
         </div>
 
@@ -709,15 +782,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
             filteredUsers.map((u) => (
               <div
                 key={u.sequenceNumber}
-                className="bg-[#09101f] border border-slate-800 hover:border-slate-700 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md"
+                className={`bg-[#09101f] border rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md transition-all ${
+                  u.isBlocked ? 'border-red-500/40 bg-red-950/10' : 'border-slate-800 hover:border-slate-700'
+                }`}
               >
                 {/* Datos del Jugador */}
                 <div className="flex items-start gap-2.5">
-                  <div className="w-10 h-10 rounded-full bg-[#050912] border-2 border-[#38bdf8] flex items-center justify-center font-black text-[#38bdf8] text-xs flex-shrink-0">
+                  <div className={`w-10 h-10 rounded-full bg-[#050912] border-2 flex items-center justify-center font-black text-xs flex-shrink-0 ${
+                    u.isBlocked ? 'border-red-500 text-red-400' : 'border-[#38bdf8] text-[#38bdf8]'
+                  }`}>
                     #{u.userCode}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-black text-white text-sm tracking-wide">{u.nickname}</span>
                       <button
                         type="button"
@@ -731,6 +808,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                       >
                         ✏️
                       </button>
+                      {/* Badge de Bloqueo de Puntos */}
+                      {u.isBlocked && (
+                        <span className="bg-red-500/20 border border-red-500/60 text-red-300 text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider">
+                          🔒 PUNTOS BLOQUEADOS
+                        </span>
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5 flex flex-wrap gap-x-3">
                       <span>Récord: <strong className="text-white">{u.highScore?.toLocaleString() || 0} pts</strong></span>
@@ -743,23 +826,38 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                 </div>
 
                 {/* Saldo y Acciones de Administrador */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/80">
+                <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/80">
                   <div className="text-left sm:text-right">
-                    <span className="text-[9px] text-slate-400 block font-bold">FICHAS ACUMULADAS:</span>
+                    <span className="text-[9px] text-slate-400 block font-bold">FICHAS:</span>
                     <span className="text-base sm:text-lg font-black text-[#fef08a] drop-shadow-[0_0_8px_rgba(254,240,138,0.8)]">
                       {(u.totalFichas || 0).toLocaleString()} 🪙
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Botón Bloquear / Desbloquear Puntos */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleBlock(u)}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all cursor-pointer flex items-center gap-1 ${
+                        u.isBlocked
+                          ? 'bg-emerald-600/25 border border-emerald-400 text-emerald-300 hover:bg-emerald-600/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]'
+                          : 'bg-amber-500/20 border border-amber-400/70 text-amber-300 hover:bg-amber-500/40'
+                      }`}
+                      title={u.isBlocked ? 'Desbloquear acumulación de fichas' : 'Bloquear acumulación de fichas tras cobrar'}
+                    >
+                      <span>{u.isBlocked ? '🔓 DESBLOQUEAR' : '🔒 BLOQUEAR'}</span>
+                    </button>
+
                     {/* Botón Cobrado / Reset a 0 */}
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedUser(u);
+                        setBlockAfterReset(true);
                         setActionType('reset');
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-red-600/20 border border-red-500/70 hover:bg-red-600/40 text-red-200 text-[10px] font-black tracking-wider transition-all cursor-pointer"
+                      className="px-2 py-1.5 rounded-lg bg-red-600/20 border border-red-500/70 hover:bg-red-600/40 text-red-200 text-[10px] font-black tracking-wider transition-all cursor-pointer"
                       title="Liquidar premio y poner a 0"
                     >
                       COBRAR (0🪙)
@@ -773,7 +871,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                         setCustomFichas(String(u.totalFichas || 0));
                         setActionType('modify');
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-[#eab308]/20 border border-[#eab308]/70 hover:bg-[#eab308]/40 text-[#fde047] text-[10px] font-black tracking-wider transition-all cursor-pointer"
+                      className="px-2 py-1.5 rounded-lg bg-[#eab308]/20 border border-[#eab308]/70 hover:bg-[#eab308]/40 text-[#fde047] text-[10px] font-black tracking-wider transition-all cursor-pointer"
                       title="Ajustar cantidad de fichas"
                     >
                       EDITAR 🪙
@@ -801,6 +899,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                 <div>Código ID: <strong className="text-[#38bdf8]">#{selectedUser.userCode}</strong></div>
                 <div>Fichas actuales a liquidar: <strong className="text-[#fde047]">{selectedUser.totalFichas.toLocaleString()} 🪙</strong></div>
               </div>
+
+              {/* Opción de bloqueo al cobrar premio */}
+              <label className="flex items-center gap-2 bg-[#080d17] p-2.5 rounded-lg border border-amber-400/50 cursor-pointer text-left">
+                <input
+                  type="checkbox"
+                  checked={blockAfterReset}
+                  onChange={(e) => setBlockAfterReset(e.target.checked)}
+                  className="w-4 h-4 accent-amber-500 rounded cursor-pointer flex-shrink-0"
+                />
+                <span className="text-[11px] text-amber-200 font-bold leading-tight">
+                  🔒 Bloquear puntos al usuario tras cobrar premio (no sumará más fichas)
+                </span>
+              </label>
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -813,16 +925,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
                   type="button"
                   onClick={handleExecuteReset}
                   disabled={loading}
-                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black"
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black shadow-[0_0_12px_rgba(239,68,68,0.5)]"
                 >
-                  {loading ? 'RESET...' : 'SÍ, RESETEAR A 0'}
+                  {loading ? 'RESET...' : 'SÍ, LIQUIDAR A 0'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* SUBMODAL: Modificar Fichas */}
+        {/* SUBMODAL: Modificar Fichas (+ / - / Fijar) */}
         {actionType === 'modify' && selectedUser && (
           <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50">
             <div className="bg-[#0f172a] border-2 border-[#eab308] rounded-xl p-5 max-w-sm w-full text-center space-y-3 font-mono">
@@ -942,9 +1054,98 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onUserD
           </div>
         )}
 
+        {/* SUBMODAL: Cambiar PIN de Administrador */}
+        {showChangePinModal && (
+          <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0f172a] border-2 border-[#eab308] rounded-xl p-5 max-w-sm w-full text-center space-y-3 font-mono">
+              <span className="text-3xl">🔑</span>
+              <h3 className="text-base font-black text-[#fde047] uppercase">
+                CAMBIAR PIN DE ADMINISTRADOR
+              </h3>
+              <p className="text-xs text-slate-300">
+                Define una nueva clave secreta para acceder al panel.
+              </p>
+
+              <div className="space-y-2 text-left">
+                <div>
+                  <label className="text-[10px] text-slate-400 block font-bold">NUEVO PIN:</label>
+                  <input
+                    type="password"
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value)}
+                    placeholder="Mínimo 4 caracteres..."
+                    className="w-full bg-[#080d17] border border-slate-700 focus:border-[#fde047] rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block font-bold">CONFIRMAR NUEVO PIN:</label>
+                  <input
+                    type="password"
+                    value={confirmPinInput}
+                    onChange={(e) => setConfirmPinInput(e.target.value)}
+                    placeholder="Repite el PIN..."
+                    className="w-full bg-[#080d17] border border-slate-700 focus:border-[#fde047] rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest outline-none"
+                  />
+                </div>
+              </div>
+
+              {pinChangeError && (
+                <div className="text-xs text-red-300 bg-red-500/20 p-2 rounded border border-red-500/50">
+                  {pinChangeError}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChangePinModal(false);
+                    setPinChangeError(null);
+                    setNewPinInput('');
+                    setConfirmPinInput('');
+                  }}
+                  className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs font-bold"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newPinInput.trim().length < 4) {
+                      setPinChangeError('El PIN debe tener al menos 4 caracteres.');
+                      return;
+                    }
+                    if (newPinInput.trim() !== confirmPinInput.trim()) {
+                      setPinChangeError('Los PINs no coinciden.');
+                      return;
+                    }
+                    localStorage.setItem('tetris_custom_admin_pin', newPinInput.trim());
+                    sounds.play('tetris');
+                    showToast('¡PIN de Administrador cambiado con éxito!');
+                    setShowChangePinModal(false);
+                    setNewPinInput('');
+                    setConfirmPinInput('');
+                    setPinChangeError(null);
+                  }}
+                  className="flex-1 py-2 bg-[#eab308] hover:bg-[#fde047] text-slate-950 rounded-lg text-xs font-black shadow-[0_0_12px_rgba(234,179,8,0.5)]"
+                >
+                  GUARDAR PIN
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pie del Panel */}
         <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-500">
-          <span>MATTRIS INC. · SISTEMA ADMINISTRATIVO</span>
+          <button
+            type="button"
+            onClick={() => setShowChangePinModal(true)}
+            className="text-[#eab308] hover:text-[#fde047] hover:underline cursor-pointer flex items-center gap-1 font-bold"
+          >
+            <span>🔑</span>
+            <span>Cambiar PIN</span>
+          </button>
           <button
             type="button"
             onClick={onClose}

@@ -878,7 +878,7 @@ export default function App() {
 
   return (
     <div className="casino-cosmic-bg w-full h-full h-dvh flex flex-col justify-between items-center overflow-hidden p-1 sm:p-2 relative bg-black">
-      {/* 1. ENCABEZADO SUPERIOR LIMPIO */}
+      {/* 1. ENCABEZADO SUPERIOR LIMPIO (SIN BARRAS SIMULADAS DE CELULAR) */}
       <header className="w-full max-w-xl flex items-center justify-between px-2 sm:px-4 py-1.5 z-20 flex-shrink-0">
         {/* Título Neón y Subtítulo */}
         <div className="flex flex-col items-start justify-center">
@@ -947,7 +947,7 @@ export default function App() {
       </header>
 
       {/* 2. ÁREA CENTRAL: TABLERO A LA IZQUIERDA + HUD LATERAL A LA DERECHA */}
-      <main className="flex-1 w-full max-w-xl flex items-center justify-center gap-2 sm:gap-4 px-2 min-h-0 overflow-hidden my-auto">
+      <main className="flex-1 w-full max-w-xl flex items-center justify-center gap-2 sm:gap-4 px-2 min-h-0 overflow-visible my-auto">
         {/* Contenedor del Tablero */}
         <div className="relative h-full max-h-[calc(100dvh-200px)] aspect-[1/2] flex items-center justify-center bg-[#04070e] rounded-xl p-1 border-2 border-[#23344d] shadow-[0_0_24px_rgba(0,0,0,0.95),0_0_14px_rgba(56,189,248,0.25),inset_0_0_14px_rgba(0,0,0,0.9)] box-border">
           <canvas
@@ -1000,9 +1000,9 @@ export default function App() {
         </div>
 
         {/* Columna Lateral Derecha de Estadísticas */}
-        <aside className="w-[82px] sm:w-[94px] flex flex-col justify-center items-center gap-2 sm:gap-3 flex-shrink-0">
+        <aside className="w-[82px] sm:w-[94px] flex flex-col justify-start items-center gap-1.5 sm:gap-2 flex-shrink-0 z-20">
           {/* Badge de Jugador Registrado en Firebase */}
-          <div className="w-full flex flex-col items-center justify-center p-1.5 bg-[#0e1524]/90 border border-[#38bdf8]/40 rounded-lg shadow-[0_0_10px_rgba(56,189,248,0.25)] text-center">
+          <div className="w-full flex flex-col items-center justify-center p-1 bg-[#0e1524]/90 border border-[#38bdf8]/40 rounded-lg shadow-[0_0_10px_rgba(56,189,248,0.25)] text-center flex-shrink-0">
             <span className="font-mono text-[9px] font-black text-[#fde047] tracking-wider truncate max-w-[76px] drop-shadow-[0_0_6px_rgba(253,224,71,0.7)] uppercase">
               {player ? player.nickname : 'Invitado'}
             </span>
@@ -1011,48 +1011,8 @@ export default function App() {
             </span>
           </div>
 
-          {/* Bloque SCORE */}
-          <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
-              SCORE
-            </span>
-            <span className="font-mono text-sm sm:text-base font-black text-white tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-              {score.toLocaleString()}
-            </span>
-          </div>
-
-          {/* Bloque LEVEL */}
-          <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
-              LEVEL
-            </span>
-            <span className="font-mono text-sm sm:text-base font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_10px_rgba(56,189,248,0.9)]">
-              {String(level).padStart(2, '0')}
-            </span>
-          </div>
-
-          {/* Bloque LINES */}
-          <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[9px] sm:text-[10px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
-              LINES
-            </span>
-            <span className="font-mono text-sm sm:text-base font-black text-[#f59e0b] tracking-widest drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]">
-              {String(lines).padStart(2, '0')}
-            </span>
-          </div>
-
-          {/* Bloque FICHAS PARTIDA */}
-          <div className="flex flex-col items-center text-center">
-            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#4ade80] drop-shadow-[0_0_6px_rgba(74,222,128,0.85)]">
-              PARTIDA
-            </span>
-            <span className="font-mono text-xs sm:text-sm font-black text-[#86efac] tracking-wide">
-              +{fichas.toLocaleString()}🪙
-            </span>
-          </div>
-
-          {/* Bloque TOTAL ACUMULADO */}
-          <div className="flex flex-col items-center text-center">
+          {/* Bloque TOTAL ACUMULADO (A LA DERECHA ARRIBA) */}
+          <div className="w-full flex flex-col items-center text-center bg-[#070f1d]/80 border border-amber-400/40 rounded-lg py-1 px-0.5 shadow-[0_0_8px_rgba(234,179,8,0.2)] flex-shrink-0">
             <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#fde047] drop-shadow-[0_0_6px_rgba(253,224,71,0.85)]">
               TOTAL SALDO
             </span>
@@ -1060,18 +1020,70 @@ export default function App() {
               {Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver ? 0 : fichas)).toLocaleString()}🪙
             </span>
           </div>
+
+          {/* BOTÓN DE PAUSA COLOCADO A LA DERECHA ARRIBA DEBAJO DE TOTAL SALDO */}
+          <button
+            type="button"
+            onClick={togglePause}
+            className="w-full py-1.5 px-1 rounded-lg bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0ea5e9] text-white border-1.5 border-[#38bdf8] active:scale-95 transition-all shadow-[0_0_12px_rgba(56,189,248,0.6)] flex items-center justify-center gap-1 cursor-pointer flex-shrink-0 z-30"
+            title={isPaused ? 'Reanudar partida' : 'Pausar partida'}
+            aria-label={isPaused ? 'Reanudar' : 'Pausar'}
+          >
+            <span className="text-xs leading-none">{isPaused ? '▶️' : '⏸️'}</span>
+            <span className="font-mono text-[10px] font-black tracking-wider text-white drop-shadow-[0_0_4px_rgba(0,0,0,0.8)]">
+              {isPaused ? 'PLAY' : 'PAUSA'}
+            </span>
+          </button>
+
+          {/* Bloque SCORE */}
+          <div className="flex flex-col items-center text-center flex-shrink-0">
+            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
+              SCORE
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-white tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+              {score.toLocaleString()}
+            </span>
+          </div>
+
+          {/* Bloque LEVEL */}
+          <div className="flex flex-col items-center text-center flex-shrink-0">
+            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
+              LEVEL
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-[#38bdf8] tracking-widest drop-shadow-[0_0_10px_rgba(56,189,248,0.9)]">
+              {String(level).padStart(2, '0')}
+            </span>
+          </div>
+
+          {/* Bloque LINES */}
+          <div className="flex flex-col items-center text-center flex-shrink-0">
+            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">
+              LINES
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-[#f59e0b] tracking-widest drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]">
+              {String(lines).padStart(2, '0')}
+            </span>
+          </div>
+
+          {/* Bloque FICHAS PARTIDA */}
+          <div className="flex flex-col items-center text-center flex-shrink-0">
+            <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#4ade80] drop-shadow-[0_0_6px_rgba(74,222,128,0.85)]">
+              PARTIDA
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-[#86efac] tracking-wide">
+              +{fichas.toLocaleString()}🪙
+            </span>
+          </div>
         </aside>
       </main>
 
-      {/* 3. CONTROLES INFERIORES TÁCTILES FLUIDOS */}
+      {/* 3. CONTROLES INFERIORES TÁCTILES FLUIDOS Y AGRANDADOS */}
       <Controls
         onMoveLeft={() => moveHorizontal(-1)}
         onMoveRight={() => moveHorizontal(1)}
         onSoftDrop={softDrop}
         onHardDrop={hardDrop}
         onRotate={tryRotatePiece}
-        onTogglePause={togglePause}
-        isPaused={isPaused}
       />
 
       {/* MODAL 1: REGISTRO / ACCESO CON CÓDIGO SECUENCIAL DE FIREBASE */}

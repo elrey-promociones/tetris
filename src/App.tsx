@@ -235,7 +235,9 @@ export default function App() {
     [checkCollision]
   );
 
-  // Fin de Juego
+  const [accumulatedFichasForModal, setAccumulatedFichasForModal] = useState<number>(0);
+
+  // Fin de Juego con actualización inmediata (0 milisegundos de latencia)
   const triggerGameOver = useCallback(
     (reachedMaxCap = false) => {
       isPlayingRef.current = false;
@@ -251,10 +253,24 @@ export default function App() {
         sounds.play('gameover');
       }
 
-      setShowPayoutModal(true);
+      // Cálculo instantáneo optimista del acumulado para cobrar sin esperar a internet
+      const prevTotal = player?.totalFichas || 0;
+      const newAccumulated = Math.min(TOPE_MAXIMO_FICHAS, prevTotal + fichas);
+      setAccumulatedFichasForModal(newAccumulated);
 
-      // Guardar sesión en Firebase Firestore y acumular saldo
       if (player) {
+        const optimisticProfile: PlayerProfile = {
+          ...player,
+          totalFichas: newAccumulated,
+          highScore: Math.max(player.highScore || 0, score),
+          gamesPlayed: (player.gamesPlayed || 0) + 1,
+        };
+        // Actualización inmediata en memoria y almacenamiento local
+        setPlayer(optimisticProfile);
+        localStorage.setItem('tetris_device_locked_user', JSON.stringify(optimisticProfile));
+        localStorage.setItem('tetris_el_rey_player', JSON.stringify(optimisticProfile));
+
+        // Guardado asíncrono en segundo plano en Firebase Firestore
         recordGameSession({
           userCode: player.userCode,
           nickname: player.nickname,
@@ -266,9 +282,12 @@ export default function App() {
           if (updated) {
             setPlayer(updated);
             localStorage.setItem('tetris_device_locked_user', JSON.stringify(updated));
+            localStorage.setItem('tetris_el_rey_player', JSON.stringify(updated));
           }
         });
       }
+
+      setShowPayoutModal(true);
     },
     [player, score, lines, level, fichas]
   );
@@ -354,9 +373,11 @@ export default function App() {
 
         setFichas((prevFichas) => {
           const nextTotal = prevFichas + addedFichas;
-          if (nextTotal >= TOPE_MAXIMO_FICHAS) {
+          const currentAccount = player?.totalFichas || 0;
+          if (currentAccount + nextTotal >= TOPE_MAXIMO_FICHAS || nextTotal >= TOPE_MAXIMO_FICHAS) {
             triggerGameOver(true);
-            return TOPE_MAXIMO_FICHAS;
+            const remaining = Math.max(0, TOPE_MAXIMO_FICHAS - currentAccount);
+            return remaining > 0 ? remaining : nextTotal;
           }
           return nextTotal;
         });
@@ -373,6 +394,7 @@ export default function App() {
         if (nextLevel > level) {
           setLevel(nextLevel);
           sounds.play('level');
+          // Curva de velocidad aumentada: 720ms * 0.82^(nivel-1)
           const newSpeed = Math.max(
             VELOCIDAD_MINIMA_MS,
             Math.floor(VELOCIDAD_INICIAL_MS * Math.pow(FACTOR_ACELERACION, nextLevel - 1))
@@ -697,7 +719,7 @@ export default function App() {
       const activePlayer = chosenPlayer || player;
       if (activePlayer) {
         setPlayer(activePlayer);
-        localStorage.setItem('tetris_device_locked_user', JSON.stringify(activePlayer));
+        localStorage.setItem('tetris_el_rey_player', JSON.stringify(activePlayer));
       }
 
       gridRef.current = createEmptyGrid();
@@ -771,7 +793,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isGameOver, moveHorizontal, softDrop, tryRotatePiece, hardDrop, togglePause]);
 
-  // Gestos táctiles directos en el canvas
+  // Gestos táctiles directos en el canvas (Drag & Tap)
   const touchTrackRef = useRef({
     active: false,
     startX: 0,
@@ -1035,7 +1057,7 @@ export default function App() {
               TOTAL SALDO
             </span>
             <span className="font-mono text-xs sm:text-sm font-black text-[#fef08a] tracking-wide drop-shadow-[0_0_10px_rgba(254,240,138,0.8)]">
-              {((player?.totalFichas || 0) + (isGameOver ? 0 : fichas)).toLocaleString()}🪙
+              {Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver ? 0 : fichas)).toLocaleString()}🪙
             </span>
           </div>
         </aside>
@@ -1061,14 +1083,14 @@ export default function App() {
         }}
       />
 
-      {/* MODAL 2: CUPÓN DE GANANCIAS Y COBRO POR WHATSAPP */}
+      {/* MODAL 2: CUPÓN DE GANANCIAS Y COBRO POR WHATSAPP (0ms de espera) */}
       <PayoutModal
         isOpen={showPayoutModal}
         player={player}
         score={score}
         lines={lines}
         gameFichas={fichas}
-        totalAccumulatedFichas={(player?.totalFichas || 0) + (isGameOver ? 0 : fichas)}
+        totalAccumulatedFichas={accumulatedFichasForModal || Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + fichas)}
         isMaxCap={isMaxCap}
         onPlayAgain={() => {
           setShowPayoutModal(false);

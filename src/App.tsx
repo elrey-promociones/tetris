@@ -1012,21 +1012,42 @@ export default function App() {
         </div>
 
         {/* Columna Lateral Derecha de Estadísticas */}
-        <aside className="w-[82px] sm:w-[94px] flex flex-col justify-start items-center gap-1.5 sm:gap-2 flex-shrink-0 z-20">
-          {/* BOTÓN DE PAUSA COLOCADO ARRIBA DEL NÚMERO ID Y MÁS VISIBLE */}
+        <aside className="w-[90px] sm:w-[104px] flex flex-col justify-start items-center gap-1.5 sm:gap-2 flex-shrink-0 z-20">
+          {/* BOTÓN DE PAUSA ESTILO CÁPSULA ÁMBAR NEÓN (MÁS GRANDE Y VISIBLE ARRIBA DEL ID) */}
           <button
             type="button"
             onClick={togglePause}
-            className={`w-full py-2 px-1.5 rounded-xl border-2 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer flex-shrink-0 z-30 ${
+            className={`w-[102px] sm:w-[116px] py-2.5 px-2 rounded-2xl border-2 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer flex-shrink-0 z-30 ${
               isPaused
-                ? 'bg-gradient-to-r from-[#fde047] via-[#eab308] to-[#f59e0b] text-slate-950 border-white shadow-[0_0_18px_rgba(253,224,71,0.95)]'
-                : 'bg-gradient-to-r from-[#0ea5e9] via-[#0284c7] to-[#2563eb] text-white border-[#fde047] shadow-[0_0_18px_rgba(56,189,248,0.85),0_0_8px_rgba(253,224,71,0.55)] hover:brightness-110'
+                ? 'bg-gradient-to-b from-[#f59e0b] to-[#b45309] border-[#fef08a] shadow-[0_0_22px_rgba(251,191,36,0.95),inset_0_0_10px_rgba(255,255,255,0.35)]'
+                : 'bg-gradient-to-b from-[#2b1a06]/95 to-[#160d03]/95 border-[#fbbf24] shadow-[0_0_18px_rgba(245,158,11,0.75),inset_0_0_10px_rgba(245,158,11,0.2)] hover:brightness-110'
             }`}
             title={isPaused ? 'Reanudar partida' : 'Pausar partida'}
             aria-label={isPaused ? 'Reanudar' : 'Pausar'}
           >
-            <span className="text-sm leading-none">{isPaused ? '▶️' : '⏸️'}</span>
-            <span className={`font-mono text-[11px] font-black tracking-widest ${isPaused ? 'text-slate-950' : 'text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]'}`}>
+            <span
+              className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center flex-shrink-0 ${
+                isPaused
+                  ? 'bg-[#1f1305] shadow-[0_0_6px_rgba(0,0,0,0.6)]'
+                  : 'bg-[#f97316] shadow-[0_0_10px_rgba(249,115,22,0.85)]'
+              }`}
+            >
+              {isPaused ? (
+                <span className="text-[11px] leading-none text-[#fef08a] ml-0.5">▶</span>
+              ) : (
+                <span className="flex items-center gap-[3px]">
+                  <span className="w-[3px] h-3 bg-[#fef3c7] rounded-[1px]" />
+                  <span className="w-[3px] h-3 bg-[#fef3c7] rounded-[1px]" />
+                </span>
+              )}
+            </span>
+            <span
+              className={`font-mono text-xs sm:text-[13px] font-black tracking-wider ${
+                isPaused
+                  ? 'text-slate-950'
+                  : 'text-[#fef08a] drop-shadow-[0_0_6px_rgba(253,224,71,0.7)]'
+              }`}
+            >
               {isPaused ? 'PLAY' : 'PAUSA'}
             </span>
           </button>

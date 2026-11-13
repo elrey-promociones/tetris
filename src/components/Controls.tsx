@@ -109,8 +109,18 @@ export const Controls: React.FC<ControlsProps> = ({
         </button>
       </div>
 
-      {/* 2. CLUSTER DE ACCIÓN DERECHO AGRANDADO: ROTAR + A (SIN PALABRAS UP, RIGHT NI DROP) */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      {/* 2. CLUSTER DE ACCIÓN DERECHO AGRANDADO: A + ROTAR */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5">
+        {/* Botón Redondo "A" (Hard Drop Instantáneo) */}
+        <button
+          type="button"
+          className="btn-round-action-a"
+          aria-label="Caída dura A"
+          onPointerDown={handleHardDrop}
+        >
+          A
+        </button>
+
         {/* Botón ROTAR Dorado Ergonómico Agrandado */}
         <button
           type="button"
@@ -119,16 +129,6 @@ export const Controls: React.FC<ControlsProps> = ({
           onPointerDown={handleRotate}
         >
           <span className="rotate-label-debossed">ROTAR</span>
-        </button>
-
-        {/* Botón Redondo "A" (Hard Drop Instantáneo Agrandado) */}
-        <button
-          type="button"
-          className="btn-round-action-a"
-          aria-label="Caída dura A"
-          onPointerDown={handleHardDrop}
-        >
-          A
         </button>
       </div>
     </footer>

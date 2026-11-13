@@ -1013,6 +1013,25 @@ export default function App() {
 
         {/* Columna Lateral Derecha de Estadísticas */}
         <aside className="w-[82px] sm:w-[94px] flex flex-col justify-start items-center gap-1.5 sm:gap-2 flex-shrink-0 z-20">
+          {/* BOTÓN DE PAUSA COLOCADO ARRIBA DEL NÚMERO ID Y MÁS VISIBLE */}
+          <button
+            type="button"
+            onClick={togglePause}
+            className={`w-full py-2 px-1.5 rounded-xl border-2 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer flex-shrink-0 z-30 ${
+              isPaused
+                ? 'bg-gradient-to-r from-[#fde047] via-[#eab308] to-[#f59e0b] text-slate-950 border-white shadow-[0_0_18px_rgba(253,224,71,0.95)]'
+                : 'bg-gradient-to-r from-[#0ea5e9] via-[#0284c7] to-[#2563eb] text-white border-[#fde047] shadow-[0_0_18px_rgba(56,189,248,0.85),0_0_8px_rgba(253,224,71,0.55)] hover:brightness-110'
+            }`}
+            title={isPaused ? 'Reanudar partida' : 'Pausar partida'}
+            aria-label={isPaused ? 'Reanudar' : 'Pausar'}
+          >
+            <span className="text-sm leading-none">{isPaused ? '▶️' : '⏸️'}</span>
+            <span className={`font-mono text-[11px] font-black tracking-widest ${isPaused ? 'text-slate-950' : 'text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]'}`}>
+              {isPaused ? 'PLAY' : 'PAUSA'}
+            </span>
+          </button>
+
+          {/* Badge de Jugador Registrado en Firebase */}
           <div className="w-full flex flex-col items-center justify-center p-1 bg-[#0e1524]/90 border border-[#38bdf8]/40 rounded-lg shadow-[0_0_10px_rgba(56,189,248,0.25)] text-center flex-shrink-0">
             <span className="font-mono text-[9px] font-black text-[#fde047] tracking-wider truncate max-w-[76px] drop-shadow-[0_0_6px_rgba(253,224,71,0.7)] uppercase">
               {player ? player.nickname : 'Invitado'}
@@ -1038,19 +1057,6 @@ export default function App() {
                 : Math.min(TOPE_MAXIMO_FICHAS, (player?.totalFichas || 0) + (isGameOver || player?.isBlocked ? 0 : fichas))).toLocaleString()}🪙
             </span>
           </div>
-
-          <button
-            type="button"
-            onClick={togglePause}
-            className="w-full py-1.5 px-1 rounded-lg bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0ea5e9] text-white border-1.5 border-[#38bdf8] active:scale-95 transition-all shadow-[0_0_12px_rgba(56,189,248,0.6)] flex items-center justify-center gap-1 cursor-pointer flex-shrink-0 z-30"
-            title={isPaused ? 'Reanudar partida' : 'Pausar partida'}
-            aria-label={isPaused ? 'Reanudar' : 'Pausar'}
-          >
-            <span className="text-xs leading-none">{isPaused ? '▶️' : '⏸️'}</span>
-            <span className="font-mono text-[10px] font-black tracking-wider text-white drop-shadow-[0_0_4px_rgba(0,0,0,0.8)]">
-              {isPaused ? 'PLAY' : 'PAUSA'}
-            </span>
-          </button>
 
           <div className="flex flex-col items-center text-center flex-shrink-0">
             <span className="font-mono text-[8px] sm:text-[9px] font-black tracking-wider text-[#38bdf8] drop-shadow-[0_0_6px_rgba(56,189,248,0.85)]">

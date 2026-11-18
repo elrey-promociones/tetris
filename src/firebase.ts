@@ -12,6 +12,7 @@ import {
   orderBy,
   limit,
   getDocs,
+  onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -90,7 +91,7 @@ export async function testConnection(): Promise<boolean> {
 export async function getNextAvailableSequenceNumber(): Promise<number> {
   const counterRef = doc(db, 'counters', 'userCounter');
   try {
-    const snap = await getDoc(counterRef);
+    const snap = await getDocFromServer(counterRef);
     if (snap.exists()) {
       const data = snap.data();
       const current = typeof data?.currentNumber === 'number' ? data.currentNumber : 0;
@@ -103,12 +104,20 @@ export async function getNextAvailableSequenceNumber(): Promise<number> {
   }
 }
 
+function generateDeviceToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /**
  * Genera un nuevo código secuencial único incremental (1, 2, 3...)
  * usando una transacción atómica en Firebase Firestore y crea el perfil del usuario.
  */
 export async function registerSequentialUser(nickname: string): Promise<PlayerProfile> {
   const counterRef = doc(db, 'counters', 'userCounter');
+  const deviceToken = generateDeviceToken();
 
   try {
     const result = await runTransaction(db, async (transaction) => {
@@ -134,7 +143,7 @@ export async function registerSequentialUser(nickname: string): Promise<PlayerPr
         { merge: true }
       );
 
-      // 2. Registrar el perfil del nuevo usuario
+      // 2. Registrar el perfil del nuevo usuario con su token único de dispositivo
       const newUserData = {
         sequenceNumber: nextNumber,
         userCode: formattedCode,
@@ -142,7 +151,7 @@ export async function registerSequentialUser(nickname: string): Promise<PlayerPr
         highScore: 0,
         totalFichas: 0,
         gamesPlayed: 0,
-        isBlocked: false,
+        deviceToken,
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
       };
@@ -156,7 +165,7 @@ export async function registerSequentialUser(nickname: string): Promise<PlayerPr
         highScore: 0,
         totalFichas: 0,
         gamesPlayed: 0,
-        isBlocked: false,
+        deviceToken,
       } as PlayerProfile;
     });
 
@@ -180,7 +189,7 @@ export async function getExistingUserByCode(code: string): Promise<PlayerProfile
   const userRef = doc(db, 'users', userDocId);
 
   try {
-    const snap = await getDoc(userRef);
+    const snap = await getDocFromServer(userRef);
     if (snap.exists()) {
       const data = snap.data();
       return {
@@ -191,6 +200,7 @@ export async function getExistingUserByCode(code: string): Promise<PlayerProfile
         totalFichas: data.totalFichas || 0,
         gamesPlayed: data.gamesPlayed || 0,
         isBlocked: !!data.isBlocked,
+        deviceToken: typeof data.deviceToken === 'string' ? data.deviceToken : undefined,
       };
     }
     return null;
@@ -199,10 +209,101 @@ export async function getExistingUserByCode(code: string): Promise<PlayerProfile
   }
 }
 
+export interface SessionValidationResult {
+  valid: boolean;
+  profile: PlayerProfile | null;
+  offline?: boolean;
+}
+
+/**
+ * Valida contra el servidor de Firestore que la sesión local siga siendo auténtica:
+ * - Si no tiene deviceToken (cuentas viejas), la invalida de inmediato.
+ * - Si el usuario fue eliminado de Firestore, la invalida.
+ * - Si el #userCode ahora pertenece a otro deviceToken (tras reiniciar contador a 0), la invalida.
+ */
+export async function validateDeviceSession(localProfile: PlayerProfile): Promise<SessionValidationResult> {
+  if (!localProfile?.userCode || !localProfile?.deviceToken) {
+    return { valid: false, profile: null };
+  }
+
+  try {
+    const fresh = await getExistingUserByCode(localProfile.userCode);
+    if (!fresh || !fresh.deviceToken || fresh.deviceToken !== localProfile.deviceToken) {
+      return { valid: false, profile: null };
+    }
+    return { valid: true, profile: fresh };
+  } catch (err) {
+    console.warn('No se pudo validar sesión con el servidor:', err);
+    return { valid: true, profile: localProfile, offline: true };
+  }
+}
+
+/**
+ * Escucha en tiempo real cambios o eliminación del usuario actual en Firestore.
+ * Si el administrador elimina el usuario en Firebase, o cambia su deviceToken,
+ * dispara onInvalid() de inmediato sin necesidad de recargar la página.
+ */
+export function subscribeToUserSession(
+  localProfile: PlayerProfile,
+  onUpdate: (fresh: PlayerProfile) => void,
+  onInvalid: () => void
+): () => void {
+  if (!localProfile?.userCode || !localProfile?.deviceToken) {
+    onInvalid();
+    return () => {};
+  }
+
+  const cleanCode = localProfile.userCode.replace(/[^0-9]/g, '');
+  const num = parseInt(cleanCode, 10);
+  if (isNaN(num) || num <= 0) {
+    onInvalid();
+    return () => {};
+  }
+
+  const userRef = doc(db, 'users', `user_${num}`);
+  return onSnapshot(
+    userRef,
+    (snap) => {
+      if (!snap.exists()) {
+        if (!snap.metadata.fromCache) {
+          onInvalid();
+        }
+        return;
+      }
+
+      const data = snap.data();
+      if (!data.deviceToken || data.deviceToken !== localProfile.deviceToken) {
+        onInvalid();
+        return;
+      }
+
+      onUpdate({
+        sequenceNumber: data.sequenceNumber || num,
+        userCode: data.userCode || String(num).padStart(4, '0'),
+        nickname: data.nickname || `Jugador #${num}`,
+        highScore: data.highScore || 0,
+        totalFichas: data.totalFichas || 0,
+        gamesPlayed: data.gamesPlayed || 0,
+        isBlocked: !!data.isBlocked,
+        deviceToken: data.deviceToken,
+      });
+    },
+    (error) => {
+      console.warn('Error en listener de sesión:', error);
+    }
+  );
+}
+
+export interface RecordGameResult {
+  profile: PlayerProfile | null;
+  userDeleted: boolean;
+}
+
 /**
  * Guarda el registro de una partida, acumula las fichas al saldo del jugador
  * y retorna el perfil actualizado con el nuevo saldo acumulado.
- * Si el usuario tiene los puntos bloqueados (isBlocked), no se suman nuevas fichas.
+ * Verifica primero en el servidor que el jugador exista y su deviceToken coincida;
+ * si fue eliminado o pertenece a un registro anterior, no guarda el récord.
  */
 export async function recordGameSession(data: {
   userCode: string;
@@ -211,58 +312,78 @@ export async function recordGameSession(data: {
   lines: number;
   level: number;
   fichas: number;
-}): Promise<PlayerProfile | null> {
+  deviceToken?: string;
+}): Promise<RecordGameResult> {
   try {
+    if (!data.deviceToken) {
+      return { profile: null, userDeleted: true };
+    }
+
+    const num = parseInt(data.userCode.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(num) || num <= 0) {
+      return { profile: null, userDeleted: true };
+    }
+
+    const userDocRef = doc(db, 'users', `user_${num}`);
+    const snap = await getDocFromServer(userDocRef);
+    if (!snap.exists()) {
+      return { profile: null, userDeleted: true };
+    }
+
+    const cur = snap.data();
+    if (!cur.deviceToken || cur.deviceToken !== data.deviceToken) {
+      return { profile: null, userDeleted: true };
+    }
+
+    const isUserBlocked = !!cur.isBlocked;
+    const addedFichas = isUserBlocked ? 0 : data.fichas;
+    const updatedFichas = Math.min(10000, (cur.totalFichas || 0) + addedFichas);
+    const updatedScore = Math.max(cur.highScore || 0, data.score);
+    const updatedGames = (cur.gamesPlayed || 0) + 1;
+
     const recordsCol = collection(db, 'game_records');
     const addRecordPromise = addDoc(recordsCol, {
-      ...data,
+      userCode: data.userCode,
+      nickname: data.nickname,
+      score: data.score,
+      lines: data.lines,
+      level: data.level,
+      fichas: data.fichas,
       createdAt: new Date().toISOString(),
       timestamp: serverTimestamp(),
     }).catch((err) => {
       console.warn('Registro secundario en background:', err);
     });
 
-    const num = parseInt(data.userCode.replace(/[^0-9]/g, ''), 10);
-    if (!isNaN(num) && num > 0) {
-      const userDocRef = doc(db, 'users', `user_${num}`);
-      const snap = await getDoc(userDocRef);
-      if (snap.exists()) {
-        const cur = snap.data();
-        const isUserBlocked = !!cur.isBlocked;
-        const addedFichas = isUserBlocked ? 0 : data.fichas;
-        const updatedFichas = Math.min(10000, (cur.totalFichas || 0) + addedFichas);
-        const updatedScore = Math.max(cur.highScore || 0, data.score);
-        const updatedGames = (cur.gamesPlayed || 0) + 1;
+    const updatePromise = setDoc(
+      userDocRef,
+      {
+        highScore: updatedScore,
+        totalFichas: updatedFichas,
+        gamesPlayed: updatedGames,
+        lastActive: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
-        const updatePromise = setDoc(
-          userDocRef,
-          {
-            highScore: updatedScore,
-            totalFichas: updatedFichas,
-            gamesPlayed: updatedGames,
-            lastActive: new Date().toISOString(),
-          },
-          { merge: true }
-        );
+    await Promise.all([addRecordPromise, updatePromise]);
 
-        await Promise.all([addRecordPromise, updatePromise]);
-
-        return {
-          sequenceNumber: cur.sequenceNumber || num,
-          userCode: cur.userCode || String(num).padStart(4, '0'),
-          nickname: cur.nickname || data.nickname,
-          highScore: updatedScore,
-          totalFichas: updatedFichas,
-          gamesPlayed: updatedGames,
-          isBlocked: isUserBlocked,
-        };
-      }
-    }
-    await addRecordPromise;
-    return null;
+    return {
+      profile: {
+        sequenceNumber: cur.sequenceNumber || num,
+        userCode: cur.userCode || String(num).padStart(4, '0'),
+        nickname: cur.nickname || data.nickname,
+        highScore: updatedScore,
+        totalFichas: updatedFichas,
+        gamesPlayed: updatedGames,
+        isBlocked: isUserBlocked,
+        deviceToken: cur.deviceToken,
+      },
+      userDeleted: false,
+    };
   } catch (err) {
     console.error('Error guardando registro de juego en Firestore:', err);
-    return null;
+    return { profile: null, userDeleted: false };
   }
 }
 

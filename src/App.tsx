@@ -795,22 +795,9 @@ export default function App() {
 
       particleSystemRef.current.update();
       render();
-     requestRef.current = requestAnimationFrame(gameLoop);
-
-      // Si se reinició partida sin registro nuevo, confirmar que el usuario y su deviceToken sigan vigentes en Firebase
-      if (!chosenPlayer && activePlayer) {
-        validateDeviceSession(activePlayer).then((validation) => {
-          if (!validation.valid || !validation.profile) {
-            clearDeletedPlayerSession();
-          } else {
-            setPlayer(validation.profile);
-            localStorage.setItem('tetris_device_locked_user', JSON.stringify(validation.profile));
-            localStorage.setItem('tetris_el_rey_player', JSON.stringify(validation.profile));
-          }
-        });
-      }
+      requestRef.current = requestAnimationFrame(gameLoop);
     },
-    [player, getNextTetromino, spawnNextPiece, gameLoop, clearDeletedPlayerSession]
+    [softDrop, render]
   );
 
   // Iniciar partida nueva
@@ -849,8 +836,21 @@ export default function App() {
       spawnNextPiece();
 
       requestRef.current = requestAnimationFrame(gameLoop);
+
+      // Si se reinició partida sin registro nuevo, confirmar que el usuario y su deviceToken sigan vigentes en Firebase
+      if (!chosenPlayer && activePlayer) {
+        validateDeviceSession(activePlayer).then((validation) => {
+          if (!validation.valid || !validation.profile) {
+            clearDeletedPlayerSession();
+          } else {
+            setPlayer(validation.profile);
+            localStorage.setItem('tetris_device_locked_user', JSON.stringify(validation.profile));
+            localStorage.setItem('tetris_el_rey_player', JSON.stringify(validation.profile));
+          }
+        });
+      }
     },
-    [player, getNextTetromino, spawnNextPiece, gameLoop]
+    [player, getNextTetromino, spawnNextPiece, gameLoop, clearDeletedPlayerSession]
   );
 
   // Teclado

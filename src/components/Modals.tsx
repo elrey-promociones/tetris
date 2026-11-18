@@ -29,6 +29,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onSuccess }) => 
 
   useEffect(() => {
     if (isOpen) {
+      setNickname('');
+      setError(null);
       getNextAvailableSequenceNumber()
         .then((num) => setNextSeqNum(num))
         .catch(() => setNextSeqNum(1));

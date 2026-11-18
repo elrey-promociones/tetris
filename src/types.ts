@@ -27,6 +27,7 @@ export interface PlayerProfile {
   totalFichas: number;
   gamesPlayed: number;
   isBlocked?: boolean;
+  deviceToken?: string;
   createdAt?: string;
   lastActive?: string;
 }

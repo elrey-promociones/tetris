@@ -12,7 +12,8 @@ import { sounds } from './audio';
 import {
   testConnection,
   recordGameSession,
-  getExistingUserByCode,
+  validateDeviceSession,
+  subscribeToUserSession,
 } from './firebase';
 import { PlayerProfile, TetrominoPiece, TetrominoType } from './types';
 import { Controls } from './components/Controls';
@@ -63,7 +64,7 @@ export default function App() {
   // Estado de Jugador y Firebase
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(true);
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [showPayoutModal, setShowPayoutModal] = useState<boolean>(false);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
   const [showAdminModal, setShowAdminModal] = useState<boolean>(false);
@@ -103,12 +104,23 @@ export default function App() {
     return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   }
 
-  // Comprobar conexión Firebase al montar y fijar dispositivo
+ const clearDeletedPlayerSession = useCallback(() => {
+    localStorage.removeItem('tetris_device_locked_user');
+    localStorage.removeItem('tetris_el_rey_player');
+    isPlayingRef.current = false;
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    setPlayer(null);
+    setShowPayoutModal(false);
+    setShowLoginModal(true);
+  }, []);
+
+  // Comprobar conexión Firebase al montar y validar sesión del dispositivo
   useEffect(() => {
     testConnection().then((connected) => {
       setFirebaseConnected(connected);
     });
 
+    // Cargar perfil vinculado al dispositivo
     const deviceUserRaw =
       localStorage.getItem('tetris_device_locked_user') ||
       localStorage.getItem('tetris_el_rey_player');
@@ -116,36 +128,87 @@ export default function App() {
     if (deviceUserRaw) {
       try {
         const parsed: PlayerProfile = JSON.parse(deviceUserRaw);
-        if (parsed.userCode && parsed.nickname) {
-          setPlayer(parsed);
+        if (parsed.userCode && parsed.nickname && parsed.deviceToken) {
           setShowLoginModal(false);
 
-          getExistingUserByCode(parsed.userCode).then((fresh) => {
-            if (fresh) {
-              setPlayer(fresh);
-              localStorage.setItem('tetris_device_locked_user', JSON.stringify(fresh));
+          // Validar en Firestore antes de iniciar la sesión (verifica existencia + deviceToken único)
+          validateDeviceSession(parsed).then((validation) => {
+            if (validation.valid && validation.profile) {
+              setPlayer(validation.profile);
+              localStorage.setItem('tetris_device_locked_user', JSON.stringify(validation.profile));
+              localStorage.setItem('tetris_el_rey_player', JSON.stringify(validation.profile));
+              startNewGame(validation.profile);
+            } else {
+              clearDeletedPlayerSession();
             }
           });
-
-          startNewGame(parsed);
+        } else {
+          // Cuentas previas sin deviceToken o corruptas: limpiar dispositivo y pedir nuevo registro
+          clearDeletedPlayerSession();
         }
       } catch {
-        setShowLoginModal(true);
+        clearDeletedPlayerSession();
       }
     } else {
       setShowLoginModal(true);
     }
-  }, []);
+  }, [clearDeletedPlayerSession]);
 
   const refreshCurrentPlayer = useCallback(async () => {
-    if (player?.userCode) {
-      const fresh = await getExistingUserByCode(player.userCode);
-      if (fresh) {
-        setPlayer(fresh);
-        localStorage.setItem('tetris_device_locked_user', JSON.stringify(fresh));
+    if (player) {
+      const validation = await validateDeviceSession(player);
+      if (validation.valid && validation.profile) {
+        setPlayer(validation.profile);
+        localStorage.setItem('tetris_device_locked_user', JSON.stringify(validation.profile));
+        localStorage.setItem('tetris_el_rey_player', JSON.stringify(validation.profile));
+      } else {
+        clearDeletedPlayerSession();
       }
     }
-  }, [player?.userCode]);
+  }, [player, clearDeletedPlayerSession]);
+
+  // Verificar en tiempo real (onSnapshot) y al volver a la pestaña en el celular
+  useEffect(() => {
+    if (!player?.userCode) return;
+
+    const unsubscribe = subscribeToUserSession(
+      player,
+      (fresh) => {
+        setPlayer((prev) => {
+          if (!prev) return fresh;
+          if (
+            prev.totalFichas === fresh.totalFichas &&
+            prev.isBlocked === fresh.isBlocked &&
+            prev.nickname === fresh.nickname &&
+            prev.highScore === fresh.highScore &&
+            prev.gamesPlayed === fresh.gamesPlayed
+          ) {
+            return prev;
+          }
+          localStorage.setItem('tetris_device_locked_user', JSON.stringify(fresh));
+          localStorage.setItem('tetris_el_rey_player', JSON.stringify(fresh));
+          return fresh;
+        });
+      },
+      () => {
+        clearDeletedPlayerSession();
+      }
+    );
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refreshCurrentPlayer();
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [player?.userCode, player?.deviceToken, refreshCurrentPlayer, clearDeletedPlayerSession]);
 
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -295,11 +358,17 @@ export default function App() {
           lines,
           level,
           fichas: fichasToRecord,
-        }).then((updated) => {
-          if (updated) {
+          deviceToken: player.deviceToken,
+        }).then((result) => {
+          if (result.userDeleted) {
+            // Si el usuario fue eliminado de Firebase, invalidar dispositivo y pedir registro nuevo
+            clearDeletedPlayerSession();
+            return;
+          }
+          if (result.profile) {
             const guaranteedProfile = reachedMaxCap
-              ? { ...updated, totalFichas: TOPE_MAXIMO_FICHAS }
-              : updated;
+              ? { ...result.profile, totalFichas: TOPE_MAXIMO_FICHAS }
+              : result.profile;
             setPlayer(guaranteedProfile);
             localStorage.setItem('tetris_device_locked_user', JSON.stringify(guaranteedProfile));
             localStorage.setItem('tetris_el_rey_player', JSON.stringify(guaranteedProfile));
@@ -309,7 +378,7 @@ export default function App() {
 
       setShowPayoutModal(true);
     },
-    [player, score, lines, level]
+    [player, score, lines, level, clearDeletedPlayerSession]
   );
 
   // Obstáculos basura indestructibles
@@ -726,9 +795,22 @@ export default function App() {
 
       particleSystemRef.current.update();
       render();
-      requestRef.current = requestAnimationFrame(gameLoop);
+     requestRef.current = requestAnimationFrame(gameLoop);
+
+      // Si se reinició partida sin registro nuevo, confirmar que el usuario y su deviceToken sigan vigentes en Firebase
+      if (!chosenPlayer && activePlayer) {
+        validateDeviceSession(activePlayer).then((validation) => {
+          if (!validation.valid || !validation.profile) {
+            clearDeletedPlayerSession();
+          } else {
+            setPlayer(validation.profile);
+            localStorage.setItem('tetris_device_locked_user', JSON.stringify(validation.profile));
+            localStorage.setItem('tetris_el_rey_player', JSON.stringify(validation.profile));
+          }
+        });
+      }
     },
-    [softDrop, render]
+    [player, getNextTetromino, spawnNextPiece, gameLoop, clearDeletedPlayerSession]
   );
 
   // Iniciar partida nueva
